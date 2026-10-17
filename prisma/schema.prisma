@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  NEW
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Lead {
+  id          Int        @id @default(autoincrement())
+  fullname    String     @db.VarChar(255)
+  phone       String     @db.VarChar(20)
+  email       String?    @db.VarChar(255)
+  note        String?    @db.Text
+  source      String     @default("Landing Page") @db.VarChar(255)
+  utm_source  String?    @db.VarChar(255)
+  utm_medium  String?    @db.VarChar(255)
+  status      LeadStatus @default(NEW)
+  exported_at DateTime?
+  created_at  DateTime   @default(now())
+  updated_at  DateTime   @updatedAt
+
+  @@index([status])
+  @@index([source])
+  @@index([created_at])
+  @@index([exported_at])
+  @@map("leads")
+}
+
+enum ActionType {
+  EXPORT
+  PURGE
+}
+
+model ExportLog {
+  id         Int        @id @default(autoincrement())
+  action     ActionType
+  count      Int
+  note       String?    @db.VarChar(500)
+  created_at DateTime   @default(now())
+
+  @@index([action])
+  @@index([created_at])
+  @@map("export_logs")
+}
