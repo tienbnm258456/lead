@@ -1,3 +1,15 @@
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  LEAD ADMIN — Database Schema                                              ║
+// ║                                                                            ║
+// ║  Hệ thống quản lý đơn hàng từ LadiPage + đồng bộ RetailCRM               ║
+// ║                                                                            ║
+// ║  Luồng hoạt động:                                                          ║
+// ║  1. Admin tạo LandingPage (kèm Product + Variants) trên admin panel       ║
+// ║  2. Cấu hình webhook URL + api_key trên LadiPage POS                      ║
+// ║  3. Khách đặt hàng → LadiPage gửi webhook → tạo Order trong DB           ║
+// ║  4. Order tự động đồng bộ sang RetailCRM                                  ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,47 +19,238 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum LeadStatus {
-  NEW
-  PROCESSING
-  COMPLETED
-  FAILED
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Trạng thái đồng bộ đơn hàng sang RetailCRM
+enum OrderSyncStatus {
+  PENDING // Chờ đồng bộ (mới tạo hoặc retry)
+  SUCCESS // Đồng bộ thành công
+  FAILED  // Đồng bộ thất bại (lỗi API, validation...)
+  TIMEOUT // Hết thời gian chờ phản hồi từ RetailCRM
 }
 
-model Lead {
-  id          Int        @id @default(autoincrement())
-  fullname    String     @db.VarChar(255)
-  phone       String     @db.VarChar(20)
-  email       String?    @db.VarChar(255)
-  note        String?    @db.Text
-  source      String     @default("Landing Page") @db.VarChar(255)
-  utm_source  String?    @db.VarChar(255)
-  utm_medium  String?    @db.VarChar(255)
-  status      LeadStatus @default(NEW)
-  exported_at DateTime?
-  created_at  DateTime   @default(now())
-  updated_at  DateTime   @updatedAt
+// ─────────────────────────────────────────────────────────────────────────────
+// SẢN PHẨM (Product Catalog)
+//
+// Mỗi sản phẩm đại diện cho 1 mặt hàng đang bán trên LadiPage.
+// Được tạo tự động khi admin tạo Landing Page mới.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  @@index([status])
+/// Bảng sản phẩm — mỗi sản phẩm gắn với 1 hoặc nhiều Landing Page
+model Product {
+  id     Int    @id @default(autoincrement())
+  name   String @db.VarChar(255) /// Tên sản phẩm hiển thị (VD: "Đai lưng", "Kem tẩy lông")
+  slug   String @unique @db.VarChar(100) /// Định danh URL-safe, tự tạo từ tên (VD: "dai-lung-abc123")
+  xml_id String? @db.VarChar(255) /// Mã sản phẩm trên RetailCRM (do đối tác cung cấp, điền sau)
+
+  /// Tùy chọn phụ (ngoài gói sản phẩm): size, trọng lượng, màu sắc...
+  /// - has_sizes = true → sản phẩm có tùy chọn phụ
+  /// - sizes = JSON object: { "label": "Size", "options": ["S", "M", "L", "XL"] }
+  ///   hoặc: { "label": "Trọng lượng", "options": ["500g", "1kg", "2kg"] }
+  has_sizes Boolean @default(false) /// Có tùy chọn phụ không? (true = có)
+  sizes     Json?                   /// Cấu hình tùy chọn phụ: { label: string, options: string[] }
+
+  active     Boolean  @default(true)  /// Trạng thái hoạt động
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Quan hệ
+  variants      ProductVariant[] /// Các gói sản phẩm (combo, giá, phí ship)
+  landing_pages LandingPage[]    /// Các trang LadiPage bán sản phẩm này
+
+  @@index([slug])
+  @@index([active])
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GÓI SẢN PHẨM (Product Variants)
+//
+// Mỗi gói = 1 lựa chọn trên form LadiPage (radio button).
+// VD: "1 quti xarid + 1 sovga – 299.000 UZS + 50.000 ship"
+//     "3 quti xarid + 3 sovga – 749.000 UZS + Bepul yetkazib berish"
+//
+// Khi webhook nhận đơn, hệ thống dùng fuzzy match text từ LadiPage
+// để tìm variant phù hợp nhất.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Gói sản phẩm — mỗi gói là 1 option trên form LadiPage
+model ProductVariant {
+  id         Int     @id @default(autoincrement())
+  product_id Int     /// FK → Product
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  label        String  @db.VarChar(500)            /// Text hiển thị trên LadiPage (dùng để fuzzy match)
+  quantity     Int     @default(1)                  /// Số lượng sản phẩm trong gói
+  price        Decimal @db.Decimal(12, 2)           /// Giá bán (UZS) — VD: 299000
+  delivery_fee Decimal @default(0) @db.Decimal(12, 2) /// Phí vận chuyển (UZS) — 0 = miễn phí
+  size         String? @db.VarChar(50)              /// Dùng nội bộ khi variant gắn với 1 size cụ thể
+  xml_id       String? @db.VarChar(255)             /// Mã variant trên RetailCRM (nếu khác mã chung của Product)
+
+  active     Boolean  @default(true) /// Trạng thái hoạt động (false = ẩn khỏi matching)
+  created_at DateTime @default(now())
+
+  @@index([product_id])
+  @@map("product_variants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LANDING PAGE (LadiPage Registry)
+//
+// Mỗi record = 1 trang LadiPage đang hoạt động.
+// api_key là chìa khóa để webhook xác định đơn hàng thuộc trang nào.
+//
+// Cấu hình trên LadiPage POS:
+//   URL: https://your-domain/api/webhook/ladipage?api_key=<API_KEY>
+//   Method: POST
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Đăng ký Landing Page — mỗi trang có 1 api_key riêng
+model LandingPage {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)         /// Tên trang hiển thị (VD: "Kem tẩy lông UZ", "Đai lưng v2")
+  api_key    String  @unique @db.VarChar(100) /// Khóa xác thực — tự gen khi tạo, dùng trong URL webhook
+  product_id Int                               /// FK → Product (sản phẩm mà trang này bán)
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  active     Boolean  @default(true) /// Trạng thái hoạt động (false = từ chối webhook)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([api_key])
+  @@index([product_id])
+  @@index([active])
+  @@map("landing_pages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ĐƠN HÀNG (Orders)
+//
+// Tạo tự động khi webhook nhận đơn từ LadiPage.
+// Sau khi tạo → đồng bộ sang RetailCRM.
+//
+// external_id format:
+//   - "ORD-00001" = đơn thật (có sync RetailCRM)
+//   - "TEST-00001" = đơn test (không sync)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Đơn hàng — nhận từ LadiPage webhook, đồng bộ sang RetailCRM
+model Order {
+  id               Int    @id @default(autoincrement())
+  external_id      String @unique @db.VarChar(100) /// Mã đơn hàng (ORD-00001, TEST-00001)
+
+  // ── Thông tin khách hàng ──
+  customer_name    String  @db.VarChar(255) /// Tên khách (trường "Ism" / "name" từ LadiPage)
+  customer_phone   String  @db.VarChar(20)  /// Số điện thoại (trường "Telefon raqami" / "phone")
+  delivery_address String  @db.Text         /// Địa chỉ giao hàng (trường "Manzil" / "address")
+
+  // ── Chi tiết đơn hàng ──
+  items_json       String  @db.Text              /// JSON chi tiết sản phẩm: [{xmlId, quantity, initialPrice, productName, variantLabel}]
+  total_price      Decimal @db.Decimal(12, 2)    /// Tổng tiền (UZS) = giá gói + phí ship
+
+  // ── Nguồn đơn hàng ──
+  source           String  @default("ladipage") @db.VarChar(100) /// Nguồn: "ladipage" (thật), "ladipage-test" (test), "api", "admin"
+  landing_slug     String? @db.VarChar(100)                      /// Slug của product (để lọc đơn theo sản phẩm/trang)
+  selected_package String? @db.VarChar(500)                      /// Text gói đã chọn (nguyên bản từ LadiPage)
+  selected_size    String? @db.VarChar(50)                       /// Tùy chọn phụ đã chọn: size, kg... (nếu có)
+
+  // ── Đồng bộ RetailCRM ──
+  sync_status  OrderSyncStatus @default(PENDING)  /// Trạng thái sync: PENDING → SUCCESS / FAILED / TIMEOUT
+  sync_message String?         @db.Text            /// Thông báo sync (VD: "Synced (RetailCRM ID: 123)" hoặc lỗi)
+  retailcrm_id Int?                                /// ID đơn hàng trên RetailCRM (sau khi sync thành công)
+  synced_at    DateTime?                           /// Thời điểm sync thành công
+
+  // ── Quản lý dữ liệu ──
+  exported_at  DateTime?                           /// Thời điểm xuất Excel (null = chưa xuất)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Quan hệ
+  sync_logs OrderSyncLog[] /// Lịch sử các lần đồng bộ
+
+  @@index([sync_status])
+  @@index([external_id])
   @@index([source])
-  @@index([created_at])
+  @@index([landing_slug])
   @@index([exported_at])
-  @@map("leads")
+  @@index([created_at])
+  @@map("orders")
 }
 
-enum ActionType {
-  EXPORT
-  PURGE
+// ─────────────────────────────────────────────────────────────────────────────
+// LỊCH SỬ HOẠT ĐỘNG (Activity Log)
+//
+// Ghi lại mỗi lần xuất Excel hoặc dọn dẹp dữ liệu.
+// Dùng cho tab Dung lượng để hiển thị lịch sử và thống kê.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ActivityAction {
+  EXPORT // Xuất Excel
+  PURGE  // Dọn dẹp (xóa data đã xuất)
 }
 
-model ExportLog {
-  id         Int        @id @default(autoincrement())
-  action     ActionType
-  count      Int
-  note       String?    @db.VarChar(500)
-  created_at DateTime   @default(now())
+/// Log hoạt động — ghi lại xuất Excel / dọn dẹp
+model ActivityLog {
+  id         Int            @id @default(autoincrement())
+  action     ActivityAction /// Loại: EXPORT hoặc PURGE
+  count      Int            /// Số bản ghi đã xuất/xóa
+  note       String?        @db.VarChar(500) /// Ghi chú (VD: "Xuất 50 đơn hàng", "Dọn dẹp đơn đã xuất")
+  created_at DateTime       @default(now())
 
   @@index([action])
   @@index([created_at])
-  @@map("export_logs")
+  @@map("activity_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LỊCH SỬ ĐỒNG BỘ (Order Sync Logs)
+//
+// Mỗi lần gửi request sang RetailCRM tạo 1 log.
+// Dùng để debug khi sync thất bại, hoặc kiểm tra payload đã gửi.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Log đồng bộ — ghi lại mỗi lần gửi đơn sang RetailCRM
+model OrderSyncLog {
+  id       Int   @id @default(autoincrement())
+  order_id Int   /// FK → Order
+  order    Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  status          OrderSyncStatus /// Kết quả lần sync này
+  http_status     Int?            /// HTTP status code từ RetailCRM (200, 400, 500...)
+  request_payload String?  @db.Text /// JSON payload đã gửi sang RetailCRM
+  response_body   String?  @db.Text /// JSON response nhận về từ RetailCRM
+  error_message   String?  @db.Text /// Thông báo lỗi (nếu có)
+  duration_ms     Int?             /// Thời gian xử lý (ms)
+
+  created_at DateTime @default(now())
+
+  @@index([order_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("order_sync_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CẤU HÌNH HỆ THỐNG (System Settings)
+//
+// Lưu trữ cấu hình động: thời gian cleanup, giới hạn, v.v.
+// Key-value store đơn giản, dùng upsert để cập nhật.
+//
+// Các key mặc định:
+//   - "sync_log_cleanup_value" → Số lượng (VD: "30")
+//   - "sync_log_cleanup_unit"  → Đơn vị: "days" | "hours" | "minutes" | "seconds"
+//   - "activity_log_cleanup_value" → Số lượng (VD: "90")
+//   - "activity_log_cleanup_unit"  → Đơn vị: "days" | "hours" | "minutes" | "seconds"
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cấu hình hệ thống — key/value store
+model SystemSetting {
+  key        String   @id @db.VarChar(100) /// Tên cấu hình
+  value      String   @db.VarChar(500)     /// Giá trị
+  updated_at DateTime @updatedAt
+
+  @@map("system_settings")
 }

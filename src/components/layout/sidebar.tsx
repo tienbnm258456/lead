@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
   LayoutDashboard,
-  Users,
+  ShoppingCart,
+  Globe,
   ChevronLeft,
   ChevronRight,
   Database,
@@ -24,9 +25,14 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    label: 'Quản lý Lead',
-    href: '/admin/leads',
-    icon: Users,
+    label: 'Đơn hàng',
+    href: '/admin/orders',
+    icon: ShoppingCart,
+  },
+  {
+    label: 'Landing Pages',
+    href: '/admin/landing-pages',
+    icon: Globe,
   },
   {
     label: 'Dung lượng',
