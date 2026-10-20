@@ -44,6 +44,7 @@ export default function StoragePage() {
     activity_log_cleanup_value: '90', activity_log_cleanup_unit: 'days',
   });
   const [savingSettings, setSavingSettings] = useState(false);
+  const [reloadingCache, setReloadingCache] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -71,16 +72,37 @@ export default function StoragePage() {
   const handleSaveSettings = async () => {
     setSavingSettings(true);
     try {
+      // UI chỉ cho cấu hình theo ngày → force unit = 'days'
+      const payload = {
+        ...settings,
+        sync_log_cleanup_unit: 'days',
+        activity_log_cleanup_unit: 'days',
+      };
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (json.success) toast.success('Đã lưu cấu hình cleanup');
       else toast.error(json.error);
     } catch { toast.error('Lỗi lưu cấu hình'); }
     finally { setSavingSettings(false); }
+  };
+
+  const handleReloadCache = async () => {
+    setReloadingCache(true);
+    try {
+      const res = await fetch('/api/settings', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        toast.success('Cache đã reload từ DB');
+        if (json.data) setSettings(json.data);
+      } else {
+        toast.error(json.error || 'Lỗi reload cache');
+      }
+    } catch { toast.error('Lỗi reload cache'); }
+    finally { setReloadingCache(false); }
   };
 
   const handlePurge = async () => {
@@ -319,15 +341,7 @@ export default function StoragePage() {
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   value={settings.sync_log_cleanup_value}
                   onChange={e => setSettings(p => ({ ...p, sync_log_cleanup_value: e.target.value }))} />
-                <select className="rounded-lg border px-2 py-1.5 text-xs outline-none"
-                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                  value={settings.sync_log_cleanup_unit}
-                  onChange={e => setSettings(p => ({ ...p, sync_log_cleanup_unit: e.target.value }))}>
-                  <option value="seconds">Giây</option>
-                  <option value="minutes">Phút</option>
-                  <option value="hours">Giờ</option>
-                  <option value="days">Ngày</option>
-                </select>
+                <span className="rounded-lg border px-3 py-1.5 text-xs font-medium" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>Ngày</span>
               </div>
 
               {/* Activity logs cleanup */}
@@ -337,21 +351,24 @@ export default function StoragePage() {
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   value={settings.activity_log_cleanup_value}
                   onChange={e => setSettings(p => ({ ...p, activity_log_cleanup_value: e.target.value }))} />
-                <select className="rounded-lg border px-2 py-1.5 text-xs outline-none"
-                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                  value={settings.activity_log_cleanup_unit}
-                  onChange={e => setSettings(p => ({ ...p, activity_log_cleanup_unit: e.target.value }))}>
-                  <option value="seconds">Giây</option>
-                  <option value="minutes">Phút</option>
-                  <option value="hours">Giờ</option>
-                  <option value="days">Ngày</option>
-                </select>
+                <span className="rounded-lg border px-3 py-1.5 text-xs font-medium" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>Ngày</span>
               </div>
 
-              <button onClick={handleSaveSettings} disabled={savingSettings}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2 text-xs font-semibold text-white shadow-lg disabled:opacity-50 transition-all hover:shadow-xl">
-                {savingSettings ? 'Đang lưu...' : 'Lưu cấu hình'}
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={handleSaveSettings} disabled={savingSettings}
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2 text-xs font-semibold text-white shadow-lg disabled:opacity-50 transition-all hover:shadow-xl">
+                  {savingSettings ? 'Đang lưu...' : 'Lưu cấu hình'}
+                </button>
+                <button onClick={handleReloadCache} disabled={reloadingCache}
+                  className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}>
+                  <RefreshCw className={`h-3 w-3 ${reloadingCache ? 'animate-spin' : ''}`} />
+                  {reloadingCache ? 'Đang reload...' : 'Reload cache'}
+                </button>
+              </div>
+              <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                💡 Nếu thay đổi cấu hình trực tiếp trong DB, bấm &quot;Reload cache&quot; để áp dụng ngay.
+              </p>
             </div>
           </div>
         </div>

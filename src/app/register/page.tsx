@@ -145,7 +145,7 @@ export default function RegisterPage() {
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
                     <Zap className="h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
                   </div>
-                  <input id="reg-username" type="text" required placeholder="admin123"
+                  <input id="reg-username" type="text" required placeholder="username"
                     className="w-full rounded-xl border pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
                     style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                     value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -234,7 +234,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="mt-5 text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
-          Lead Admin Management System · Next.js & PostgreSQL
+          Lead Admin Management System
         </p>
       </main>
     </div>

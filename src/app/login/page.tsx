@@ -61,7 +61,7 @@ export default function LoginPage() {
       }
 
       toast.success('Đăng nhập thành công! Đang chuyển hướng...');
-      
+
       // Get callback URL from search params
       const searchParams = new URLSearchParams(window.location.search);
       const callbackUrl = searchParams.get('callbackUrl') || '/admin';
@@ -178,7 +178,7 @@ export default function LoginPage() {
                     type="text"
                     required
                     autoComplete="username"
-                    placeholder="admin hoặc postgres"
+                    placeholder="username"
                     className="w-full rounded-xl border pl-10 pr-4 py-2.5 text-sm transition-all outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500"
                     style={{
                       background: 'var(--muted)',
@@ -281,7 +281,7 @@ export default function LoginPage() {
 
         {/* Footer info */}
         <p className="mt-5 text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
-          Lead Admin Management System · Next.js & PostgreSQL
+          Lead Admin Management System
         </p>
       </main>
     </div>

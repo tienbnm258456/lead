@@ -3,9 +3,9 @@
  * Handles communication with UzShopping RetailCRM system
  */
 
-const RETAILCRM_BASE_URL = 'https://uzshopping.retailcrm.ru/api/v5';
+const RETAILCRM_BASE_URL = process.env.RETAILCRM_BASE_URL || 'https://uzshopping.retailcrm.ru/api/v5';
 const RETAILCRM_API_KEY = process.env.RETAILCRM_API_KEY || '';
-const RETAILCRM_SITE = 'uzshopping';
+const RETAILCRM_SITE = process.env.RETAILCRM_SITE || 'uzshopping';
 const REQUEST_TIMEOUT_MS = 15_000; // 15 seconds
 
 // ─── Types ───────────────────────────────────────────────────────────────────
