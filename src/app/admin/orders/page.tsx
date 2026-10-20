@@ -31,6 +31,32 @@ interface LandingPageOption {
   productName: string;
 }
 
+interface FormVariant {
+  id: number;
+  label: string;
+  quantity: number;
+  price: string;
+  delivery_fee: string;
+  size: string | null;
+  xml_id: string | null;
+}
+
+interface FormProduct {
+  id: number;
+  name: string;
+  slug: string;
+  xml_id: string | null;
+  has_sizes: boolean;
+  sizes: { label: string; options: string[] } | null;
+  variants: FormVariant[];
+}
+
+interface FormLandingPage {
+  id: number;
+  name: string;
+  product: FormProduct;
+}
+
 interface OrdersResponse {
   data: Order[];
   total: number;
@@ -61,10 +87,10 @@ const statusOptions = [
 ];
 
 const statusConfig: Record<string, { label: string; classes: string }> = {
-  PENDING: { label: 'Chờ xử lý', classes: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' },
-  SUCCESS: { label: 'Thành công', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
-  FAILED: { label: 'Thất bại', classes: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' },
-  TIMEOUT: { label: 'Timeout', classes: 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400' },
+  PENDING: { label: 'Chờ xử lý', classes: 'badge-warning' },
+  SUCCESS: { label: 'Thành công', classes: 'badge-success' },
+  FAILED: { label: 'Thất bại', classes: 'badge-error' },
+  TIMEOUT: { label: 'Timeout', classes: 'badge-error' },
 };
 
 async function fetchOrders(filters: OrderFilters): Promise<OrdersResponse> {
@@ -87,7 +113,7 @@ export default function OrdersPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<OrderFilters>({
     page: 1,
-    pageSize: 20,
+    pageSize: 10,
     sortBy: 'created_at',
     sortOrder: 'desc',
   });
@@ -96,9 +122,22 @@ export default function OrdersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '' });
+  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // ── Cascading form state ──
+  const [formLandingPages, setFormLandingPages] = useState<FormLandingPage[]>([]);
+  const [formLoadingLP, setFormLoadingLP] = useState(false);
+  const [selectedLPId, setSelectedLPId] = useState<number | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+
+  // Derived data from selected landing page
+  const selectedLP = formLandingPages.find(lp => lp.id === selectedLPId);
+  const selectedProduct = selectedLP?.product;
+  const variants = selectedProduct?.variants || [];
+  const selectedVariant = variants.find(v => v.id === selectedVariantId);
+  const hasSizes = selectedProduct?.has_sizes && selectedProduct?.sizes?.options?.length;
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['orders', filters],
@@ -135,7 +174,16 @@ export default function OrdersPage() {
       if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
       return res.json();
     },
-    onSuccess: () => { toast.success('Tạo đơn hàng thành công!'); closeForm(); queryClient.invalidateQueries({ queryKey: ['orders'] }); },
+    onSuccess: (data) => {
+      toast.success('Tạo đơn hàng thành công!');
+      if (data.syncStatus === 'SUCCESS') {
+        toast.success(data.syncMessage || 'Đã đồng bộ CRM');
+      } else if (data.syncMessage) {
+        toast.warning(data.syncMessage);
+      }
+      closeForm();
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
     onError: (err: Error) => toast.error(err.message),
   });
 
@@ -168,14 +216,69 @@ export default function OrdersPage() {
     onError: () => toast.error('Lỗi khi xóa hàng loạt'),
   });
 
-  const closeForm = () => { setShowForm(false); setEditOrder(null); setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '' }); };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditOrder(null);
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setSelectedLPId(null);
+    setSelectedVariantId(null);
+  };
 
-  const openCreateForm = () => { setEditOrder(null); setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '' }); setShowForm(true); };
+  const openCreateForm = async () => {
+    setEditOrder(null);
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setSelectedLPId(null);
+    setSelectedVariantId(null);
+    setShowForm(true);
+    // Fetch landing pages for the form
+    setFormLoadingLP(true);
+    try {
+      const res = await fetch('/api/landing-pages?pageSize=100');
+      if (res.ok) {
+        const json = await res.json();
+        setFormLandingPages(json.data || []);
+      }
+    } catch { /* ignore */ }
+    finally { setFormLoadingLP(false); }
+  };
 
   const openEditForm = (o: Order) => {
     setEditOrder(o);
-    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '' });
+    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
+    setSelectedLPId(null);
+    setSelectedVariantId(null);
     setShowForm(true);
+  };
+
+  // Handle landing page selection → reset variant + size
+  const handleSelectLP = (lpId: number | null) => {
+    setSelectedLPId(lpId);
+    setSelectedVariantId(null);
+    if (lpId) {
+      const lp = formLandingPages.find(l => l.id === lpId);
+      setFormData(p => ({ ...p, landing_slug: lp?.product.slug || '', selected_package: '', selected_size: '', total_price: '' }));
+    } else {
+      setFormData(p => ({ ...p, landing_slug: '', selected_package: '', selected_size: '', total_price: '' }));
+    }
+  };
+
+  // Handle variant selection → auto-fill price + package label
+  const handleSelectVariant = (variantId: number | null) => {
+    setSelectedVariantId(variantId);
+    if (variantId) {
+      const v = variants.find(vr => vr.id === variantId);
+      if (v) {
+        const totalPrice = parseFloat(v.price) + parseFloat(v.delivery_fee);
+        setFormData(p => ({
+          ...p,
+          selected_package: v.label,
+          total_price: String(totalPrice),
+          selected_size: '',
+        }));
+      }
+    } else {
+      setFormData(p => ({ ...p, selected_package: '', total_price: '', selected_size: '' }));
+    }
   };
 
   const handleSubmit = () => {
@@ -252,6 +355,7 @@ export default function OrdersPage() {
     { key: 'delivery_address', label: 'Địa chỉ', noSort: true },
     { key: 'total_price', label: 'Tổng tiền' },
     { key: 'selected_package', label: 'Gói SP', noSort: true },
+    { key: 'selected_size', label: 'Tùy chọn', noSort: true },
     { key: 'sync_status', label: 'Trạng thái' },
     { key: 'created_at', label: 'Ngày tạo' },
     { key: 'actions', label: '', noSort: true },
@@ -277,18 +381,6 @@ export default function OrdersPage() {
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
             Danh sách đơn hàng từ LadiPage ({total} đơn)
-            {filters.landingSlug && (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
-                <Globe className="h-3 w-3" />
-                {landingPageMap.get(filters.landingSlug)?.name || filters.landingSlug}
-                <button
-                  onClick={() => setFilters(p => ({ ...p, landingSlug: '', page: 1 }))}
-                  className="ml-0.5 hover:text-indigo-900 dark:hover:text-indigo-200"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -416,6 +508,51 @@ export default function OrdersPage() {
         )}
       </div>
 
+      {/* Active filter tags */}
+      {(filters.landingSlug || filters.status || filters.dateFrom || filters.dateTo) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Đang lọc:</span>
+          {filters.landingSlug && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+              Landing: {landingPageMap.get(filters.landingSlug)?.name || filters.landingSlug}
+              <button onClick={() => setFilters(p => ({ ...p, landingSlug: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {filters.status && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+              Trạng thái: {statusOptions.find(s => s.value === filters.status)?.label}
+              <button onClick={() => setFilters(p => ({ ...p, status: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {filters.dateFrom && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+              Từ: {filters.dateFrom}
+              <button onClick={() => setFilters(p => ({ ...p, dateFrom: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {filters.dateTo && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+              Đến: {filters.dateTo}
+              <button onClick={() => setFilters(p => ({ ...p, dateTo: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          <button
+            onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', page: 1 }))}
+            className="text-xs font-medium text-red-500 hover:text-red-400 transition-colors"
+          >
+            Xóa tất cả
+          </button>
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 rounded-xl border p-3 animate-fade-in"
@@ -435,49 +572,54 @@ export default function OrdersPage() {
       )}
 
       {/* Data table */}
-      <div className="overflow-hidden rounded-xl border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+      <div className="card-elevated overflow-hidden !rounded-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full">
             <thead>
               <tr style={{ background: 'var(--muted)' }}>
-                <th className="w-10 px-3 py-3">
-                  <input type="checkbox" className="rounded" checked={orders.length > 0 && selectedIds.size === orders.length}
+                <th className="w-10 px-4 py-3.5">
+                  <input type="checkbox" className="rounded h-4 w-4" checked={orders.length > 0 && selectedIds.size === orders.length}
                     onChange={toggleSelectAll} />
                 </th>
-                {columns.map(col => (
-                  <th key={col.key} className="px-4 py-3 text-left">
-                    {col.noSort ? (
-                      <span className="font-semibold" style={{ color: 'var(--muted-foreground)' }}>{col.label}</span>
-                    ) : (
-                      <button
-                        onClick={() => handleSort(col.key)}
-                        className="flex items-center gap-1.5 font-semibold transition-colors"
-                        style={{ color: 'var(--muted-foreground)' }}
-                      >
-                        {col.label} <SortIcon col={col.key} />
-                      </button>
-                    )}
-                  </th>
-                ))}
+                {columns.map(col => {
+                  // Right-align price header
+                  const align = col.key === 'total_price' ? 'text-right' : 'text-left';
+                  return (
+                    <th key={col.key} className={`px-4 py-3.5 ${align}`}>
+                      {col.noSort ? (
+                        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--foreground)', opacity: 0.55 }}>{col.label}</span>
+                      ) : (
+                        <button
+                          onClick={() => handleSort(col.key)}
+                          className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-80 ${col.key === 'total_price' ? 'ml-auto' : ''}`}
+                          style={{ color: 'var(--foreground)', opacity: 0.55 }}
+                        >
+                          {col.label} <SortIcon col={col.key} />
+                        </button>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                    {Array.from({ length: columns.length }).map((_, j) => (
-                      <td key={j} className="px-4 py-3.5">
-                        <div className="h-4 w-full animate-pulse rounded" style={{ background: 'var(--muted)' }} />
+                    <td className="px-4 py-4" />
+                    {columns.map((_, j) => (
+                      <td key={j} className="px-4 py-4">
+                        <div className="h-5 w-full animate-pulse rounded-md" style={{ background: 'var(--muted)' }} />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-4 py-16 text-center">
-                    <ShoppingCart className="mx-auto h-10 w-10 mb-3" style={{ color: 'var(--muted-foreground)' }} />
-                    <p className="font-semibold" style={{ color: 'var(--foreground)' }}>Chưa có đơn hàng nào</p>
-                    <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                  <td colSpan={columns.length + 1} className="px-4 py-20 text-center">
+                    <ShoppingCart className="mx-auto h-12 w-12 mb-3" style={{ color: 'var(--disabled)' }} />
+                    <p className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>Chưa có đơn hàng nào</p>
+                    <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
                       {filters.landingSlug
                         ? 'Không tìm thấy đơn hàng cho trang này'
                         : 'Đơn hàng sẽ hiển thị khi có khách đặt hàng từ LadiPage'}
@@ -494,104 +636,119 @@ export default function OrdersPage() {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     {/* Checkbox */}
-                    <td className="px-3 py-3">
-                      <input type="checkbox" className="rounded"
+                    <td className="px-4 py-3.5">
+                      <input type="checkbox" className="rounded h-4 w-4"
                         checked={selectedIds.has(order.id)}
                         onChange={() => toggleSelect(order.id)} />
                     </td>
-                    {/* External ID */}
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-bold font-mono bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
-                        <Package className="h-3 w-3" />
+                    {/* External ID — text link */}
+                    <td className="px-4 py-3.5">
+                      <button
+                        onClick={() => openEditForm(order)}
+                        className="font-mono text-sm font-semibold whitespace-nowrap transition-colors hover:underline cursor-pointer text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
                         {order.external_id}
-                      </span>
+                      </button>
                     </td>
-                    {/* Landing Page */}
-                    <td className="px-4 py-3">
+                    {/* Landing Page — minimal with filter icon on hover */}
+                    <td className="px-4 py-3.5">
                       {order.landing_slug ? (
                         <button
                           onClick={() => setFilters(p => ({ ...p, landingSlug: order.landing_slug!, page: 1 }))}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-950/60"
+                          className="group/lp inline-flex items-center gap-1 text-sm transition-colors cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-400"
+                          style={{ color: 'var(--card-foreground)' }}
                           title={`Lọc theo: ${landingPageMap.get(order.landing_slug)?.name || order.landing_slug}`}
                         >
-                          <Globe className="h-3 w-3" />
                           {landingPageMap.get(order.landing_slug)?.name || order.landing_slug}
+                          <Filter className="h-3 w-3 opacity-0 group-hover/lp:opacity-50 transition-opacity" />
                         </button>
                       ) : (
-                        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>—</span>
+                        <span className="text-sm" style={{ color: 'var(--disabled)' }}>—</span>
                       )}
                     </td>
                     {/* Customer name */}
-                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--foreground)' }}>
+                    <td className="px-4 py-3.5 text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
                       {order.customer_name}
                     </td>
                     {/* Phone */}
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                    <td className="px-4 py-3.5 font-mono text-sm" style={{ color: 'var(--card-foreground)' }}>
                       {order.customer_phone}
                     </td>
                     {/* Address */}
-                    <td className="px-4 py-3 text-xs max-w-[200px]" style={{ color: 'var(--muted-foreground)' }}>
+                    <td className="px-4 py-3.5 text-sm max-w-[220px]" style={{ color: 'var(--card-foreground)' }}>
                       <span className="line-clamp-2" title={order.delivery_address}>
                         {order.delivery_address}
                       </span>
                     </td>
-                    {/* Total price */}
-                    <td className="px-4 py-3 text-xs font-semibold tabular-nums whitespace-nowrap" style={{ color: 'var(--foreground)' }}>
+                    {/* Total price — right-aligned */}
+                    <td className="px-4 py-3.5 text-sm font-semibold font-mono tabular-nums whitespace-nowrap text-right" style={{ color: 'var(--foreground)' }}>
                       {formatPrice(order.total_price)}
                     </td>
-                    {/* Selected package */}
-                    <td className="px-4 py-3 text-xs max-w-[180px]" style={{ color: 'var(--muted-foreground)' }}>
-                      <span className="line-clamp-2" title={order.selected_package || '—'}>
-                        {order.selected_package || '—'}
-                      </span>
+                    {/* Selected package — line-clamp-2 + tooltip */}
+                    <td className="px-4 py-3.5 text-sm max-w-[240px]" style={{ color: 'var(--card-foreground)' }}>
+                      {order.selected_package ? (
+                        <span className="line-clamp-2" title={order.selected_package}>
+                          {order.selected_package}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--disabled)' }}>—</span>
+                      )}
                     </td>
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        statusConfig[order.sync_status]?.classes || 'bg-gray-100 text-gray-700'
-                      }`}>
+                    {/* Selected size / option */}
+                    <td className="px-4 py-3.5">
+                      {order.selected_size ? (
+                        <span className="text-sm" style={{ color: 'var(--card-foreground)' }}>
+                          {order.selected_size}
+                        </span>
+                      ) : (
+                        <span className="text-sm" style={{ color: 'var(--disabled)' }}>—</span>
+                      )}
+                    </td>
+                    {/* Status — soft bordered badge */}
+                    <td className="px-4 py-3.5">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusConfig[order.sync_status]?.classes || 'bg-gray-100 text-gray-700'}`}>
                         {statusConfig[order.sync_status]?.label || order.sync_status}
                       </span>
                     </td>
                     {/* Created at */}
-                    <td className="px-4 py-3 text-xs tabular-nums whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
+                    <td className="px-4 py-3.5 text-sm tabular-nums whitespace-nowrap" style={{ color: 'var(--card-foreground)' }}>
                       {new Date(order.created_at).toLocaleDateString('vi-VN', {
                         year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
                       })}
                       {order.exported_at && (
-                        <span className="ml-1 text-[10px] text-emerald-500" title={`Exported: ${new Date(order.exported_at).toLocaleString('vi-VN')}`}>✓</span>
+                        <span className="ml-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold" title={`Exported: ${new Date(order.exported_at).toLocaleString('vi-VN')}`}>✓</span>
                       )}
                     </td>
                     {/* Actions */}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => openEditForm(order)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                           style={{ color: 'var(--muted-foreground)' }}
                           onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                           title="Sửa">
-                          <Edit2 className="h-3.5 w-3.5" />
+                          <Edit2 className="h-4 w-4" />
                         </button>
                         {deleteConfirm === order.id ? (
                           <>
                             <button onClick={() => deleteMutation.mutate(order.id)}
-                              className="flex h-7 items-center justify-center rounded-lg px-2 bg-red-600 text-white text-xs font-medium">
+                              className="flex h-8 items-center justify-center rounded-lg px-3 bg-red-600 text-white text-sm font-medium">
                               Xóa
                             </button>
                             <button onClick={() => setDeleteConfirm(null)}
-                              className="flex h-7 items-center justify-center rounded-lg px-2 border text-xs"
+                              className="flex h-8 items-center justify-center rounded-lg px-3 border text-sm"
                               style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}>
                               Hủy
                             </button>
                           </>
                         ) : (
                           <button onClick={() => setDeleteConfirm(order.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-red-500 transition-colors"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 transition-colors"
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             title="Xóa">
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         )}
                       </div>
@@ -604,47 +761,43 @@ export default function OrdersPage() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t px-4 py-3" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              Trang {filters.page} / {totalPages} · {total} đơn hàng
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={filters.page === 1}
-                onClick={() => setFilters(p => ({ ...p, page: (p.page || 1) - 1 }))}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-40"
-                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const p = filters.page! <= 3 ? i + 1 : filters.page! - 2 + i;
-                if (p > totalPages) return null;
-                return (
-                  <button
-                    key={p}
-                    onClick={() => setFilters(prev => ({ ...prev, page: p }))}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition-colors ${
-                      p === filters.page ? 'bg-indigo-500 text-white' : 'border'
-                    }`}
-                    style={p !== filters.page ? { borderColor: 'var(--border)', color: 'var(--foreground)' } : {}}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
-              <button
-                disabled={filters.page === totalPages}
-                onClick={() => setFilters(p => ({ ...p, page: (p.page || 1) + 1 }))}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-40"
-                style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+        <div className="flex items-center justify-between border-t px-5 py-3.5" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Trang <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{filters.page}</span> / {totalPages} · {total} đơn hàng
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              disabled={filters.page === 1}
+              onClick={() => setFilters(p => ({ ...p, page: (p.page || 1) - 1 }))}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-30"
+              style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const p = filters.page! <= 3 ? i + 1 : filters.page! - 2 + i;
+              if (p > totalPages || p < 1) return null;
+              return (
+                <button
+                  key={p}
+                  onClick={() => setFilters(prev => ({ ...prev, page: p }))}
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors ${p === filters.page ? 'bg-indigo-500 text-white' : 'border'}`}
+                  style={p !== filters.page ? { borderColor: 'var(--border)', color: 'var(--foreground)' } : {}}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              disabled={filters.page === totalPages}
+              onClick={() => setFilters(p => ({ ...p, page: (p.page || 1) + 1 }))}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border transition-colors disabled:opacity-30"
+              style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Create/Edit Modal ── */}
@@ -661,11 +814,12 @@ export default function OrdersPage() {
                 {editOrder ? 'Sửa đơn hàng' : 'Thêm đơn hàng'}
               </h2>
               <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                {editOrder ? `Chỉnh sửa đơn ${editOrder.external_id}` : 'Tạo đơn hàng thủ công'}
+                {editOrder ? `Chỉnh sửa đơn ${editOrder.external_id}` : 'Tạo đơn hàng thủ công và đồng bộ CRM'}
               </p>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-7 space-y-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-5 space-y-5">
+              {/* ── Customer Info ── */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tên khách <span className="text-red-500">*</span></label>
@@ -686,26 +840,118 @@ export default function OrdersPage() {
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   placeholder="Địa chỉ giao hàng" value={formData.delivery_address} onChange={e => setFormData(p => ({ ...p, delivery_address: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tổng tiền (UZS)</label>
-                  <input type="number" className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                    placeholder="0" value={formData.total_price} onChange={e => setFormData(p => ({ ...p, total_price: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Gói SP</label>
-                  <input className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                    placeholder="Gói sản phẩm" value={formData.selected_package} onChange={e => setFormData(p => ({ ...p, selected_package: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tùy chọn</label>
-                  <input className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                    placeholder="Size, kg..." value={formData.selected_size} onChange={e => setFormData(p => ({ ...p, selected_size: e.target.value }))} />
-                </div>
-              </div>
+
+              {/* ── Product Cascade (only for new orders) ── */}
+              {!editOrder && (
+                <>
+                  <div className="border-t pt-5" style={{ borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>Sản phẩm</p>
+                    {/* Landing Page select */}
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Landing Page <span className="text-red-500">*</span></label>
+                      <select
+                        className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        value={selectedLPId || ''}
+                        onChange={e => handleSelectLP(e.target.value ? Number(e.target.value) : null)}
+                        disabled={formLoadingLP}
+                      >
+                        <option value="">{formLoadingLP ? 'Đang tải...' : '— Chọn Landing Page —'}</option>
+                        {formLandingPages.filter(lp => lp.product.variants.length > 0).map(lp => (
+                          <option key={lp.id} value={lp.id}>
+                            {lp.name} ({lp.product.name})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Variant select (visible after LP selected) */}
+                  {selectedLPId && variants.length > 0 && (
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Gói sản phẩm <span className="text-red-500">*</span></label>
+                      <select
+                        className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        value={selectedVariantId || ''}
+                        onChange={e => handleSelectVariant(e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">— Chọn gói —</option>
+                        {variants.map(v => (
+                          <option key={v.id} value={v.id}>
+                            {v.label} — {new Intl.NumberFormat('uz-UZ').format(parseFloat(v.price))} UZS
+                            {parseFloat(v.delivery_fee) > 0 ? ` + ${new Intl.NumberFormat('uz-UZ').format(parseFloat(v.delivery_fee))} ship` : ' (Miễn phí ship)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Size / option select (visible if product has sizes AND variant selected) */}
+                  {selectedVariantId && hasSizes && selectedProduct?.sizes && (
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>
+                        {selectedProduct.sizes.label || 'Tùy chọn'} <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        value={formData.selected_size}
+                        onChange={e => setFormData(p => ({ ...p, selected_size: e.target.value }))}
+                      >
+                        <option value="">— Chọn {selectedProduct.sizes.label?.toLowerCase() || 'tùy chọn'} —</option>
+                        {selectedProduct.sizes.options.map((opt: string) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Auto-calculated price display */}
+                  {selectedVariant && (
+                    <div className="rounded-lg p-4" style={{ background: 'var(--muted)' }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Tổng tiền</span>
+                        <span className="text-lg font-bold font-mono" style={{ color: 'var(--foreground)' }}>
+                          {new Intl.NumberFormat('uz-UZ').format(Number(formData.total_price))} UZS
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Giá gói: {new Intl.NumberFormat('uz-UZ').format(parseFloat(selectedVariant.price))} UZS</span>
+                        <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                          Ship: {parseFloat(selectedVariant.delivery_fee) > 0 ? `${new Intl.NumberFormat('uz-UZ').format(parseFloat(selectedVariant.delivery_fee))} UZS` : 'Miễn phí'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Manual fields for edit mode ── */}
+              {editOrder && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tổng tiền (UZS)</label>
+                      <input type="number" className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        placeholder="0" value={formData.total_price} onChange={e => setFormData(p => ({ ...p, total_price: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Gói SP</label>
+                      <input className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                        placeholder="Gói sản phẩm" value={formData.selected_package} onChange={e => setFormData(p => ({ ...p, selected_package: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tùy chọn</label>
+                    <input className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                      style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                      placeholder="Size, kg, màu sắc..." value={formData.selected_size} onChange={e => setFormData(p => ({ ...p, selected_size: e.target.value }))} />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="shrink-0 flex justify-end gap-3 px-7 py-5 border-t" style={{ borderColor: 'var(--border)' }}>

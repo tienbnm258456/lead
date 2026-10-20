@@ -168,7 +168,7 @@ export default function ForgotPasswordPage() {
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
                       <Mail className="h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
                     </div>
-                    <input id="fp-identifier" type="text" required placeholder="admin hoặc email@example.com"
+                    <input id="fp-identifier" type="text" required placeholder="username hoặc email@example.com"
                       className="w-full rounded-xl border pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500"
                       style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                       value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
@@ -287,7 +287,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p className="mt-5 text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
-          Lead Admin Management System · Next.js & PostgreSQL
+          Lead Admin Management System
         </p>
       </main>
     </div>

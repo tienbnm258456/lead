@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN TOKENS — Tailwind v4 inline theme + CSS Custom Properties
+   ═══════════════════════════════════════════════════════════════════ */
 @theme inline {
+  /* Color tokens (bridging CSS vars → Tailwind classes) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -16,35 +20,75 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Typography — Inter primary, JetBrains Mono code */
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   LIGHT MODE — Soft, anti-glare, WCAG AA compliant
+   Background: Cool off-white  |  Cards: Pure white (elevation)
+   Text: High-contrast Slate tones  |  Accents: Soft muted badges
+   ───────────────────────────────────────────────────────────────── */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #6366f1;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
-  --primary: #6366f1;
+  /* ── Surface & Elevation ── */
+  --background: #f3f4f6;          /* Gray-100 — soft off-white, easy on eyes */
+  --foreground: #0f172a;          /* Slate-900 — primary text, headings */
+  --card: #ffffff;                /* Pure white — card elevation layer */
+  --card-foreground: #1e293b;    /* Slate-800 — card body text */
+  --border: #e2e8f0;             /* Slate-200 — subtle dividers */
+  --input: #e5e7eb;              /* Gray-200 — input borders */
+  --ring: #6366f1;               /* Indigo-500 — focus ring */
+
+  /* ── Muted / Secondary ── */
+  --muted: #f1f5f9;              /* Slate-100 — muted backgrounds */
+  --muted-foreground: #475569;   /* Slate-600 — secondary text (labels, captions) */
+  --disabled: #94a3b8;           /* Slate-400 — disabled / placeholder text */
+
+  /* ── Accent ── */
+  --accent: #f0f4ff;             /* Indigo-50 tint — subtle accent bg */
+  --accent-foreground: #1e293b;  /* Slate-800 */
+
+  /* ── Primary (Brand) ── */
+  --primary: #4f46e5;            /* Indigo-600 — slightly darker for AA contrast on white */
   --primary-foreground: #ffffff;
-  --destructive: #ef4444;
+
+  /* ── Destructive ── */
+  --destructive: #dc2626;        /* Red-600 */
   --destructive-foreground: #ffffff;
+
+  /* ── Sidebar ── */
   --sidebar-bg: #ffffff;
-  --sidebar-border: #e2e8f0;
-  --sidebar-active: #eef2ff;
-  --sidebar-active-text: #4f46e5;
+  --sidebar-border: #e5e7eb;     /* Gray-200 */
+  --sidebar-active: #eef2ff;     /* Indigo-50 */
+  --sidebar-active-text: #4338ca; /* Indigo-700 — stronger for AA */
   --sidebar-hover: #f1f5f9;
-  --sidebar-text: #334155;
-  --sidebar-icon: #94a3b8;
+  --sidebar-text: #334155;       /* Slate-700 */
+  --sidebar-icon: #94a3b8;       /* Slate-400 */
+
+  /* ── Card shadow (stronger for visible elevation) ── */
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 2px 8px -1px rgba(0, 0, 0, 0.06);
+  --card-shadow-hover: 0 4px 16px -2px rgba(0, 0, 0, 0.12), 0 2px 6px -2px rgba(0, 0, 0, 0.06);
+
+  /* ── Status colors (Soft Badges — WCAG AA) ── */
+  --status-success-bg: #dcfce7;     /* Green-100 */
+  --status-success-text: #166534;   /* Green-800 */
+  --status-success-border: #bbf7d0; /* Green-200 */
+  --status-warning-bg: #ffedd5;     /* Orange-100 */
+  --status-warning-text: #9a3412;   /* Orange-800 */
+  --status-warning-border: #fed7aa; /* Orange-200 */
+  --status-error-bg: #fee2e2;       /* Red-100 */
+  --status-error-text: #991b1b;     /* Red-800 */
+  --status-error-border: #fecaca;   /* Red-200 */
+  --status-info-bg: #dbeafe;        /* Blue-100 */
+  --status-info-text: #1e40af;      /* Blue-800 */
+  --status-info-border: #bfdbfe;    /* Blue-200 */
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   DARK MODE — Deep navy, comfortable contrast
+   ───────────────────────────────────────────────────────────────── */
 .dark {
   --background: #0b1120;
   --foreground: #e2e8f0;
@@ -55,6 +99,7 @@
   --ring: #818cf8;
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
+  --disabled: #64748b;
   --accent: #1e293b;
   --accent-foreground: #e2e8f0;
   --primary: #818cf8;
@@ -68,8 +113,27 @@
   --sidebar-hover: #1e293b;
   --sidebar-text: #94a3b8;
   --sidebar-icon: #64748b;
+
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+  --card-shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+
+  --status-success-bg: rgba(16, 185, 129, 0.15);
+  --status-success-text: #34d399;
+  --status-success-border: rgba(16, 185, 129, 0.25);
+  --status-warning-bg: rgba(245, 158, 11, 0.15);
+  --status-warning-text: #fbbf24;
+  --status-warning-border: rgba(245, 158, 11, 0.25);
+  --status-error-bg: rgba(244, 63, 94, 0.15);
+  --status-error-text: #fb7185;
+  --status-error-border: rgba(244, 63, 94, 0.25);
+  --status-info-bg: rgba(96, 165, 250, 0.15);
+  --status-info-text: #93bbfd;
+  --status-info-border: rgba(96, 165, 250, 0.25);
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   BASE STYLES
+   ───────────────────────────────────────────────────────────────── */
 * {
   border-color: var(--border);
 }
@@ -78,9 +142,102 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11"; /* Inter alternate glyphs */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  letter-spacing: -0.011em; /* Tighter tracking for Inter at body sizes */
 }
 
-/* Scrollbar */
+/* ─────────────────────────────────────────────────────────────────
+   TYPOGRAPHY UTILITY CLASSES
+   ───────────────────────────────────────────────────────────────── */
+
+/* Page title: 24px bold */
+.text-page-title {
+  font-size: 1.5rem;      /* 24px */
+  font-weight: 700;
+  line-height: 2rem;      /* 32px */
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+}
+
+/* Section heading: 16-18px semibold */
+.text-section-heading {
+  font-size: 0.9375rem;   /* 15px */
+  font-weight: 600;
+  line-height: 1.375rem;  /* 22px */
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+/* Metric number: 24-30px bold tabular */
+.text-metric {
+  font-size: 1.75rem;     /* 28px */
+  font-weight: 700;
+  line-height: 2.25rem;   /* 36px */
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+/* Body text: 14px normal */
+.text-body {
+  font-size: 0.875rem;    /* 14px */
+  font-weight: 400;
+  line-height: 1.25rem;   /* 20px */
+  color: var(--card-foreground);
+}
+
+/* Caption / label: 12px medium */
+.text-caption {
+  font-size: 0.75rem;     /* 12px */
+  font-weight: 500;
+  line-height: 1rem;      /* 16px */
+  color: var(--muted-foreground);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   COMPONENT UTILITIES
+   ───────────────────────────────────────────────────────────────── */
+
+/* Card with elevation shadow */
+.card-elevated {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;    /* 16px */
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-elevated:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* Status badges — soft with border */
+.badge-success {
+  background: var(--status-success-bg);
+  color: var(--status-success-text);
+  border: 1px solid var(--status-success-border);
+}
+.badge-warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border: 1px solid var(--status-warning-border);
+}
+.badge-error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  border: 1px solid var(--status-error-border);
+}
+.badge-info {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+  border: 1px solid var(--status-info-border);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SCROLLBAR
+   ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -89,7 +246,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--muted-foreground);
+  background: var(--disabled);
   border-radius: 3px;
   opacity: 0.4;
 }
@@ -97,9 +254,11 @@ body {
   opacity: 0.7;
 }
 
-/* Smooth transitions */
+/* ─────────────────────────────────────────────────────────────────
+   TRANSITIONS & ANIMATIONS
+   ───────────────────────────────────────────────────────────────── */
 .transition-sidebar {
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
               padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -113,7 +272,7 @@ body {
   background: rgba(15, 23, 42, 0.75);
 }
 
-/* Animations */
+/* Keyframes */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

@@ -13,6 +13,7 @@ import {
   Zap,
   LogOut,
   HardDrive,
+  KeyRound,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -139,8 +140,37 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom Area: Logout & DB info */}
-      <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--sidebar-border)' }}>
+      {/* Bottom Area: Change Password, Logout & DB info */}
+      <div className="border-t p-3 space-y-1" style={{ borderColor: 'var(--sidebar-border)' }}>
+        <Link
+          href="/admin/change-password"
+          className={cn(
+            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+            pathname === '/admin/change-password' ? 'shadow-sm' : 'hover:translate-x-0.5',
+            collapsed ? 'justify-center' : ''
+          )}
+          style={{
+            background: pathname === '/admin/change-password' ? 'var(--sidebar-active)' : 'transparent',
+            color: pathname === '/admin/change-password' ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+          }}
+          onMouseEnter={(e) => {
+            if (pathname !== '/admin/change-password') {
+              e.currentTarget.style.background = 'var(--sidebar-hover)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (pathname !== '/admin/change-password') {
+              e.currentTarget.style.background = 'transparent';
+            }
+          }}
+          title="Đổi mật khẩu"
+        >
+          <KeyRound className="h-4 w-4 shrink-0" style={{
+            color: pathname === '/admin/change-password' ? 'var(--sidebar-active-text)' : 'var(--sidebar-icon)',
+          }} />
+          {!collapsed && <span>Đổi mật khẩu</span>}
+        </Link>
+
         <button
           onClick={handleLogout}
           disabled={loggingOut}
@@ -158,7 +188,7 @@ export function Sidebar() {
           <div className="flex items-center gap-2 rounded-lg p-2" style={{ background: 'var(--muted)' }}>
             <Database className="h-4 w-4" style={{ color: 'var(--muted-foreground)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>
-              PostgreSQL Connected
+              Connected
             </span>
             <span className="ml-auto h-2 w-2 rounded-full bg-emerald-500" style={{ animation: 'pulse-dot 2s ease-in-out infinite' }} />
           </div>

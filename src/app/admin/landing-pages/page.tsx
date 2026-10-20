@@ -483,13 +483,13 @@ export default function LandingPagesPage() {
                           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Giá (UZS)</label>
                           <input type="number" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                            placeholder="299000" value={v.price} onChange={e => updateVariant(idx, 'price', e.target.value)} />
+                            placeholder="299" value={v.price} onChange={e => updateVariant(idx, 'price', e.target.value)} />
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Phí ship (UZS)</label>
                           <input type="number" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                            placeholder="50000" value={v.delivery_fee} onChange={e => updateVariant(idx, 'delivery_fee', e.target.value)} />
+                            placeholder="50" value={v.delivery_fee} onChange={e => updateVariant(idx, 'delivery_fee', e.target.value)} />
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Số lượng</label>
