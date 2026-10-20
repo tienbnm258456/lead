@@ -12,9 +12,7 @@ import {
   Sun,
   Moon,
   ArrowRight,
-  ShieldCheck,
   Database,
-  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,11 +32,6 @@ export default function LoginPage() {
     setMounted(true);
   }, []);
 
-  const handleQuickFill = (user: string, pass: string) => {
-    setUsername(user);
-    setPassword(pass);
-    setError('');
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,7 +232,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Remember Me */}
+              {/* Remember Me + Forgot Password */}
               <div className="flex items-center justify-between text-xs pt-1">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -250,10 +243,9 @@ export default function LoginPage() {
                   />
                   <span style={{ color: 'var(--muted-foreground)' }}>Ghi nhớ đăng nhập</span>
                 </label>
-                <span className="flex items-center gap-1 font-medium text-emerald-500">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Bảo mật phiên
-                </span>
+                <a href="/forgot-password" className="font-medium text-indigo-500 hover:underline">
+                  Quên mật khẩu?
+                </a>
               </div>
 
               {/* Submit Button */}
@@ -277,41 +269,13 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Quick Demo Credentials Box */}
-            <div
-              className="rounded-2xl border p-3.5 space-y-2 text-xs"
-              style={{
-                background: 'var(--muted)',
-                borderColor: 'var(--border)',
-              }}
-            >
-              <div className="flex items-center justify-between font-semibold" style={{ color: 'var(--foreground)' }}>
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                  Tài khoản mặc định:
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('admin', '123456')}
-                  className="flex flex-col items-start rounded-lg border p-2 transition-all hover:border-indigo-500/60 hover:bg-[var(--card)] text-left group"
-                  style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
-                >
-                  <span className="font-bold text-indigo-500 group-hover:underline">admin</span>
-                  <span style={{ color: 'var(--muted-foreground)' }} className="text-[11px]">Pass: 123456</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('postgres', '123456')}
-                  className="flex flex-col items-start rounded-lg border p-2 transition-all hover:border-purple-500/60 hover:bg-[var(--card)] text-left group"
-                  style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
-                >
-                  <span className="font-bold text-purple-500 group-hover:underline">postgres</span>
-                  <span style={{ color: 'var(--muted-foreground)' }} className="text-[11px]">Pass: 123456</span>
-                </button>
-              </div>
-            </div>
+            {/* Register Link */}
+            <p className="text-center text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              Chưa có tài khoản?{' '}
+              <a href="/register" className="font-semibold text-indigo-500 hover:underline">
+                Đăng ký ngay
+              </a>
+            </p>
           </div>
         </div>
 

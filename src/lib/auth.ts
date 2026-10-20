@@ -1,17 +1,15 @@
 // Authentication configuration & session helpers
+// Now backed by database (AdminUser table) with hashed passwords
 
 export const AUTH_COOKIE_NAME = 'lead_admin_token';
 export const AUTH_SECRET = process.env.AUTH_SECRET || 'lead_admin_secret_key_2026_super_secure';
 
-// Hardcoded admin accounts
-export const VALID_CREDENTIALS = [
-  { username: 'admin', password: '123456', name: 'Quản trị viên' },
-  { username: 'postgres', password: '123456', name: 'Postgres Admin' },
-];
-
 export interface AuthUser {
+  id: number;
   username: string;
   name: string;
+  role: string;
+  email?: string | null;
 }
 
 // Simple Edge-compatible token generator using Web Crypto API
@@ -34,8 +32,11 @@ function bufferToHex(buffer: ArrayBuffer): string {
 
 export async function createAuthToken(user: AuthUser): Promise<string> {
   const payload = {
+    id: user.id,
     username: user.username,
     name: user.name,
+    role: user.role,
+    email: user.email,
     exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 
@@ -72,8 +73,11 @@ export async function verifyAuthToken(token: string | undefined | null): Promise
     }
 
     return {
+      id: payload.id,
       username: payload.username,
       name: payload.name,
+      role: payload.role,
+      email: payload.email,
     };
   } catch {
     return null;

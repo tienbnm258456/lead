@@ -5,6 +5,7 @@ import {
   type RetailCrmOrderPayload,
 } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
+import { withLogger } from '@/lib/api-logger';
 
 /**
  * Generate a unique externalId from DB order id.
@@ -105,7 +106,7 @@ function findMatchingVariant(
  * 4. Create Order in DB
  * 5. Sync to RetailCRM
  */
-export async function POST(request: NextRequest) {
+export const POST = withLogger(async function POST(request: NextRequest) {
   // ── Extract api_key from query params ────────────────────────────
   const apiKey = request.nextUrl.searchParams.get('api_key');
 
@@ -316,4 +317,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});

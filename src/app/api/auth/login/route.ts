@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { VALID_CREDENTIALS, createAuthToken, AUTH_COOKIE_NAME } from '@/lib/auth';
+import { createAuthToken, AUTH_COOKIE_NAME } from '@/lib/auth';
+import { verifyPassword } from '@/lib/password';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
   try {
@@ -13,13 +15,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const matchedUser = VALID_CREDENTIALS.find(
-      (u) =>
-        u.username.toLowerCase() === username.trim().toLowerCase() &&
-        u.password === password
-    );
+    // Look up user in database
+    const dbUser = await prisma.adminUser.findUnique({
+      where: { username: username.trim().toLowerCase() },
+    });
 
-    if (!matchedUser) {
+    if (!dbUser || !dbUser.active) {
+      return NextResponse.json(
+        { error: 'Tài khoản hoặc mật khẩu không chính xác' },
+        { status: 401 }
+      );
+    }
+
+    // Verify password against hash
+    const isValid = await verifyPassword(password, dbUser.password_hash);
+    if (!isValid) {
       return NextResponse.json(
         { error: 'Tài khoản hoặc mật khẩu không chính xác' },
         { status: 401 }
@@ -27,8 +37,11 @@ export async function POST(request: Request) {
     }
 
     const user = {
-      username: matchedUser.username,
-      name: matchedUser.name,
+      id: dbUser.id,
+      username: dbUser.username,
+      name: dbUser.name,
+      role: dbUser.role,
+      email: dbUser.email,
     };
 
     const token = await createAuthToken(user);

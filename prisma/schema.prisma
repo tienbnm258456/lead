@@ -254,3 +254,38 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUẢN TRỊ VIÊN (Admin Users)
+//
+// Lưu tài khoản đăng nhập admin panel.
+// Password được hash bằng Web Crypto (PBKDF2-SHA256).
+// reset_token dùng cho luồng quên mật khẩu.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AdminRole {
+  ADMIN  // Toàn quyền
+  VIEWER // Chỉ xem
+}
+
+/// Tài khoản quản trị viên
+model AdminUser {
+  id             Int       @id @default(autoincrement())
+  username       String    @unique @db.VarChar(50)  /// Tên đăng nhập (unique)
+  email          String?   @unique @db.VarChar(255) /// Email (dùng để quên mật khẩu)
+  password_hash  String    @db.VarChar(500)         /// Password hash (PBKDF2-SHA256)
+  name           String    @db.VarChar(100)         /// Tên hiển thị
+  role           AdminRole @default(ADMIN)          /// Quyền: ADMIN hoặc VIEWER
+  active         Boolean   @default(true)           /// Trạng thái hoạt động
+
+  /// Quên mật khẩu
+  reset_token      String?   @unique @db.VarChar(255) /// Token reset mật khẩu
+  reset_token_exp  DateTime?                          /// Hạn token reset
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([username])
+  @@index([email])
+  @@map("admin_users")
+}

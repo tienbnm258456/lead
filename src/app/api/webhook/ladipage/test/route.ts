@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withLogger } from '@/lib/api-logger';
 
 /**
  * Generate a unique externalId from DB order id.
@@ -84,7 +85,7 @@ function findMatchingVariant(
  *  - sync_status = "PENDING" (không tự chuyển SUCCESS/FAILED)
  *  - source = "ladipage-test"
  */
-export async function POST(request: NextRequest) {
+export const POST = withLogger(async function POST(request: NextRequest) {
   const apiKey = request.nextUrl.searchParams.get('api_key');
 
   if (!apiKey) {
@@ -262,4 +263,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});
