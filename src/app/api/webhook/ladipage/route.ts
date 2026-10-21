@@ -6,6 +6,7 @@ import {
 } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
 import { withLogger } from '@/lib/api-logger';
+import { rateLimiter } from '@/lib/rate-limiter';
 
 /**
  * Generate a unique externalId from DB order id.
@@ -107,13 +108,46 @@ function findMatchingVariant(
  * 5. Sync to RetailCRM
  */
 export const POST = withLogger(async function POST(request: NextRequest) {
-  // ── Extract api_key from query params ────────────────────────────
+  // ── Rate Limiting ───────────────────────────────────────────────────
+  // Chống spam: giới hạn request theo IP
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
+
   const apiKey = request.nextUrl.searchParams.get('api_key');
 
+  // Có API key → 30 req/phút, không có → 5 req/phút (chặn spam nhanh)
+  const rateLimit = apiKey ? 30 : 5;
+  const rateLimitKey = apiKey ? `${clientIp}:${apiKey}` : `${clientIp}:nokey`;
+  const { allowed, remaining, resetAt } = rateLimiter.check(rateLimitKey, rateLimit, 60_000);
+
+  if (!allowed) {
+    console.log(`[LadiPage Webhook] 🚫 Rate limited IP: ${clientIp} (key: ${apiKey ? 'yes' : 'no'})`);
+    const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);
+    return NextResponse.json(
+      { success: false, error: 'Too many requests. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfter),
+          'X-RateLimit-Limit': String(rateLimit),
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(Math.ceil(resetAt / 1000)),
+        },
+      },
+    );
+  }
+
+  // ── Extract api_key from query params ────────────────────────────
   if (!apiKey) {
     return NextResponse.json(
       { success: false, error: 'Missing api_key parameter' },
-      { status: 401 },
+      {
+        status: 401,
+        headers: {
+          'X-RateLimit-Remaining': String(remaining),
+        },
+      },
     );
   }
 

@@ -27,16 +27,17 @@ export function Header() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [username, setUsername] = useState('Admin');
+  const [userName, setUserName] = useState('Admin');
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    // Lấy tên hiển thị — /api/auth/me chỉ trả {name, role}, không trả id/email/username
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
-        if (data?.user?.username) {
-          setUsername(data.user.name || data.user.username);
+        if (data?.name) {
+          setUserName(data.name);
         }
       })
       .catch(() => {});
@@ -148,7 +149,7 @@ export function Header() {
             </div>
             <div className="hidden sm:block">
               <p className="text-xs font-semibold leading-tight" style={{ color: 'var(--foreground)' }}>
-                {username}
+                {userName}
               </p>
               <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
                 Hệ thống Quản trị

@@ -247,7 +247,8 @@ export default function DashboardCharts({
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number, name: string) => [`${value} đơn`, name]}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    formatter={(value: any, name: any) => [`${value} đơn`, name]}
                     contentStyle={{
                       background: 'var(--card)',
                       border: '1px solid var(--border)',

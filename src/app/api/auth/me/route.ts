@@ -12,8 +12,10 @@ export async function GET() {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
+  // Chỉ trả thông tin hiển thị tối thiểu — không trả id, email, username
   return NextResponse.json({
     authenticated: true,
-    user,
+    name: user.name || user.username,
+    role: user.role,
   });
 }

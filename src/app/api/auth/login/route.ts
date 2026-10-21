@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAuthToken, AUTH_COOKIE_NAME } from '@/lib/auth';
 import { verifyPassword } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
+import { getAuthCookieOptions } from '@/lib/cookie-options';
 
 export async function POST(request: Request) {
   try {
@@ -49,19 +50,10 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       message: 'Đăng nhập thành công',
-      user,
     });
 
-    // Set secure HTTP-only cookie
-    response.cookies.set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
+    // Set secure HTTP-only cookie — auto-detect secure flag from request
+    response.cookies.set(getAuthCookieOptions(AUTH_COOKIE_NAME, token, request));
 
     return response;
   } catch (error) {
