@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
+import { OrderSyncStatus } from '@prisma/client';
 
 /**
  * GET /api/orders
@@ -95,7 +97,13 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/orders
- * Tạo đơn hàng thủ công từ admin
+ * Tạo đơn hàng thủ công từ admin + đồng bộ sang RetailCRM
+ *
+ * Flow:
+ *  1. Validate input
+ *  2. Tạo order trong DB (sync_status = PENDING)
+ *  3. Gọi RetailCRM /api/v5/orders/create
+ *  4. Cập nhật sync_status + tạo OrderSyncLog
  */
 export async function POST(request: Request) {
   try {
@@ -127,7 +135,65 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, data: order }, { status: 201 });
+    console.log(`[Admin] Order #${order.id} created → externalId: ${externalId}`);
+
+    // ── Sync to RetailCRM ────────────────────────────────────────────
+    const crmPayload: RetailCrmOrderPayload = {
+      externalId,
+      firstName: customer_name,
+      phone: customer_phone,
+      delivery: {
+        address: {
+          countryIso: 'UZ',
+          text: delivery_address,
+        },
+      },
+      items: [{
+        xmlId: externalId, // Use externalId as xmlId for manual orders
+        quantity: 1,
+        initialPrice: Number(total_price) || 0,
+      }],
+    };
+
+    const syncResult = await createRetailCrmOrder(crmPayload);
+    const durationMs = syncResult.completedAt.getTime() - syncResult.sentAt.getTime();
+    const dbSyncStatus: OrderSyncStatus = syncResult.status as OrderSyncStatus;
+
+    // ── Update order + create sync log ───────────────────────────────
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          sync_status: dbSyncStatus,
+          sync_message:
+            syncResult.status === 'SUCCESS'
+              ? `Synced (RetailCRM ID: ${syncResult.response?.id})`
+              : syncResult.errorMessage || null,
+          retailcrm_id: syncResult.response?.id || null,
+          synced_at: syncResult.status === 'SUCCESS' ? syncResult.completedAt : null,
+        },
+      }),
+      prisma.orderSyncLog.create({
+        data: {
+          order_id: order.id,
+          status: dbSyncStatus,
+          http_status: syncResult.httpStatus || null,
+          request_payload: JSON.stringify(crmPayload),
+          response_body: syncResult.response ? JSON.stringify(syncResult.response) : null,
+          error_message: syncResult.errorMessage || null,
+          duration_ms: durationMs,
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: { ...order, sync_status: dbSyncStatus },
+      syncStatus: dbSyncStatus,
+      syncMessage: syncResult.status === 'SUCCESS'
+        ? `Đồng bộ CRM thành công (ID: ${syncResult.response?.id})`
+        : `Đồng bộ CRM thất bại: ${syncResult.errorMessage}`,
+    }, { status: 201 });
   } catch (error) {
     console.error('Error creating order:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

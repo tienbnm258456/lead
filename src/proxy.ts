@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { AUTH_COOKIE_NAME, verifyAuthToken } from '@/lib/auth';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const user = await verifyAuthToken(token);
 
   const isAdminRoute = pathname.startsWith('/admin');
-  const isLoginRoute = pathname === '/login';
+  const isAuthPage =
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/forgot-password';
   const isRootRoute = pathname === '/';
 
   // If trying to access admin without authentication
@@ -18,8 +21,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If trying to access login while already authenticated
-  if (isLoginRoute && user) {
+  // If trying to access auth pages (login/register/forgot-password) while already authenticated
+  if (isAuthPage && user) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
@@ -46,6 +49,8 @@ export const config = {
      */
     '/',
     '/login',
+    '/register',
+    '/forgot-password',
     '/admin/:path*',
   ],
 };

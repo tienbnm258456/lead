@@ -81,3 +81,23 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
+
+/**
+ * POST /api/settings
+ * Reload settings cache từ DB (dùng khi thay đổi trực tiếp trong DB)
+ */
+export async function POST() {
+  try {
+    invalidateSettingsCache();
+    // Force re-load
+    const rows = await prisma.systemSetting.findMany();
+    const settings: Record<string, string> = { ...DEFAULTS };
+    for (const row of rows) {
+      settings[row.key] = row.value;
+    }
+    return NextResponse.json({ success: true, message: 'Cache đã được reload từ DB', data: settings });
+  } catch (error) {
+    console.error('Settings reload error:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+  }
+}

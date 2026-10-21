@@ -163,7 +163,8 @@ model Order {
   synced_at    DateTime?                           /// Thời điểm sync thành công
 
   // ── Quản lý dữ liệu ──
-  exported_at  DateTime?                           /// Thời điểm xuất Excel (null = chưa xuất)
+  exported_at        DateTime?                           /// Thời điểm xuất Excel (null = chưa xuất)
+  sheets_exported_at DateTime?                           /// Thời điểm xuất Google Sheets (null = chưa xuất)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
