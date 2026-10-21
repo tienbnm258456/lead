@@ -66,7 +66,7 @@ module.exports = {
         PORT: 3000,
 
         // Database
-        DATABASE_URL: 'postgresql://postgres:123456@localhost:5433/lead_admin?schema=public',
+        DATABASE_URL: 'postgresql://postgres:Admin123456@localhost:5432/lead_admin?schema=public',
 
         // RetailCRM
         RETAILCRM_BASE_URL: 'https://uzshopping.retailcrm.ru/api/v5',
