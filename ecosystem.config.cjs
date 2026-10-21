@@ -39,7 +39,7 @@ module.exports = {
       name: 'lead-admin',
       // Chạy next start (production server)
       script: 'node_modules/.bin/next',
-      args: 'start --port 3000',
+      args: 'start -p 3000',
       cwd: './',
 
       // ── Logging ───────────────────────────────────────────────────
