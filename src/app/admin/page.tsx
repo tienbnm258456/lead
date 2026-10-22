@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import DashboardCharts from '@/components/dashboard-charts';
 
+// Luôn fetch data mới từ DB mỗi lần truy cập — không dùng cache tĩnh từ lúc build
+export const dynamic = 'force-dynamic';
+
 async function getStats() {
   const [total, pendingCount, successCount, failedCount, todayCount] = await Promise.all([
     prisma.order.count(),

@@ -9,6 +9,14 @@ const nextConfig: NextConfig = {
       fullUrl: true,
     },
   },
+  // Tắt client-side router cache — mỗi lần navigate luôn fetch data mới từ server
+  // Mặc định Next.js cache 30s (dynamic) / 5min (static) → hiển thị data cũ
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
+  },
   turbopack: {
     rules: {
       "*.css": {
