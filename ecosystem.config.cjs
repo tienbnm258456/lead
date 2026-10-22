@@ -3,16 +3,17 @@
 //
 // Giải quyết 3 vấn đề khi chạy PM2 trên production (IP, chưa có domain):
 //
-// 1. PM2 KHÔNG tự load .env → Phải khai báo env_production ở đây
+// 1. PM2 KHÔNG tự load .env → Secrets được load từ .env.production
 // 2. PM2 mặc định output log bị buffer → console.log không hiện real-time
 //    → Sử dụng merge_logs: true
 // 3. CORS khi dùng IP → Không cần xử lý vì Next.js API routes trên cùng
 //    origin không bị CORS.
 //
 // Cách dùng:
-//   pm2 start ecosystem.config.cjs --env production
-//   pm2 logs lead-admin --lines 100
-//   pm2 restart lead-admin
+//   1. Tạo file .env.production với secrets thật (xem .env.example)
+//   2. pm2 start ecosystem.config.cjs --env production
+//   3. pm2 logs lead-admin --lines 100
+//   4. pm2 restart lead-admin
 //
 // ── Quản lý log (QUAN TRỌNG) ───────────────────────────────────────────
 // Log PM2 nằm ở: ~/.pm2/logs/
@@ -32,6 +33,37 @@
 //   pm2 flush
 //
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── Load production secrets from .env.production (gitignored) ────────────
+const fs = require('fs');
+const path = require('path');
+
+function loadEnvFile(filePath) {
+  try {
+    const fullPath = path.resolve(__dirname, filePath);
+    const content = fs.readFileSync(fullPath, 'utf8');
+    const env = {};
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      // Remove surrounding quotes
+      if ((val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      env[key] = val;
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
+const prodSecrets = loadEnvFile('.env.production');
 
 module.exports = {
   apps: [
@@ -53,7 +85,7 @@ module.exports = {
       node_args: '--max-http-header-size=16384',
 
       // ── Environment Variables ──────────────────────────────────────
-      // PM2 KHÔNG đọc .env file → phải khai báo env ở đây
+      // PM2 KHÔNG đọc .env file → secrets được load từ .env.production
       //
       // Dùng --env production khi start:
       //   pm2 start ecosystem.config.cjs --env production
@@ -65,24 +97,16 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000,
 
-        // Database
-        DATABASE_URL: 'postgresql://postgres:Admin123456@localhost:5432/lead_admin?schema=public',
+        // ── Secrets (loaded from .env.production) ──────────────────
+        // H3 Fix: Secrets KHÔNG hardcode ở đây nữa.
+        // Tạo file .env.production trên server với nội dung thật.
+        // (Xem .env.example để biết format)
+        ...prodSecrets,
 
-        // RetailCRM
-        RETAILCRM_BASE_URL: 'https://uzshopping.retailcrm.ru/api/v5',
-        RETAILCRM_API_KEY: 'Um9xgLlLFkl7A59fX2c37ciGFtE5x94X',
-        RETAILCRM_SITE: 'uzshopping',
-
-        // Cleanup
-        CLEANUP_CRON_HOUR: '23',
-
-        // Google Sheets Export
-        GOOGLE_APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbykFQSWjsx450NxHq4kvAL-6k3-MJiYAyg9jUoFyC3c7LBJDh6_cGaYo07Q9UKes701/exec',
-        SHEETS_EXPORT_MONTHS: '2,4,6,8,10,12',
-
-        // Force HTTP mode (vì chưa có domain/SSL)
-        // Bỏ dòng này khi đã có domain + HTTPS
-        FORCE_HTTP: 'true',
+        // ── Non-secret defaults (có thể override bởi .env.production) ──
+        CLEANUP_CRON_HOUR: prodSecrets.CLEANUP_CRON_HOUR || '23',
+        SHEETS_EXPORT_MONTHS: prodSecrets.SHEETS_EXPORT_MONTHS || '2,4,6,8,10,12',
+        ORDER_PREFIX: prodSecrets.ORDER_PREFIX || 'LDP-',
       },
 
       // ── Process Management ─────────────────────────────────────────
@@ -102,4 +126,3 @@ module.exports = {
     },
   ],
 };
-

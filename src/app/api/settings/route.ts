@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { invalidateSettingsCache } from '@/lib/settings-cache';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * GET /api/settings
@@ -15,6 +16,9 @@ const DEFAULTS: Record<string, string> = {
 };
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const rows = await prisma.systemSetting.findMany();
     const settings: Record<string, string> = { ...DEFAULTS };
@@ -34,6 +38,9 @@ export async function GET() {
  * Body: { "key1": "value1", "key2": "value2" }
  */
 export async function PUT(request: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json() as Record<string, string>;
 
@@ -87,6 +94,9 @@ export async function PUT(request: Request) {
  * Reload settings cache từ DB (dùng khi thay đổi trực tiếp trong DB)
  */
 export async function POST() {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     invalidateSettingsCache();
     // Force re-load

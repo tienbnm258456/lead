@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSettings, toMs } from '@/lib/settings-cache';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * GET /api/storage
@@ -8,6 +9,9 @@ import { getSettings, toMs } from '@/lib/settings-cache';
  * + thống kê exported/unexported + lịch sử activity
  */
 export async function GET() {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -39,7 +43,7 @@ export async function GET() {
     let dbSizeBytes = 0;
 
     try {
-      const tableSizes = await prisma.$queryRawUnsafe<TableSize[]>(`
+      const tableSizes = await prisma.$queryRaw<TableSize[]>`
         SELECT
           relname as table_name,
           pg_total_relation_size(quote_ident(relname))::bigint as total_bytes,
@@ -49,7 +53,7 @@ export async function GET() {
         FROM pg_stat_user_tables
         WHERE schemaname = 'public'
         ORDER BY pg_total_relation_size(quote_ident(relname)) DESC
-      `);
+      `;
 
       tableBreakdown = tableSizes.map(t => ({
         name: String(t.table_name),
@@ -130,6 +134,9 @@ export async function GET() {
  * Đồng thời auto-cleanup: sync_logs + activity_logs theo cấu hình động.
  */
 export async function DELETE(request: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
 

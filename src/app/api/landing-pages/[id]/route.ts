@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import { requireAuth } from '@/lib/require-auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -28,6 +29,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   if (isNaN(numId)) {
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
+
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
 
   try {
     const body = await request.json();
@@ -157,6 +161,9 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
 
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const lp = await prisma.landingPage.findUnique({ where: { id: numId } });
     if (!lp) {
@@ -190,6 +197,9 @@ export async function PATCH(_request: NextRequest, context: RouteContext) {
   if (isNaN(numId)) {
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
+
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
 
   try {
     const newApiKey = crypto.randomBytes(24).toString('base64url');

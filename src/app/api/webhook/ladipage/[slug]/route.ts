@@ -10,12 +10,7 @@ type RouteContext = {
   params: Promise<{ slug: string }>;
 };
 
-/**
- * Generate a unique externalId from DB order id.
- */
-function generateExternalId(orderId: number): string {
-  return `ORD-${String(orderId).padStart(5, '0')}`;
-}
+import { generateExternalId } from '@/lib/order-id';
 
 /**
  * Find the best matching variant by comparing the selected option text.
@@ -232,6 +227,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       firstName: name,
       phone,
       delivery: {
+        cost: Number(matchedVariant.delivery_fee) || 0,
         address: {
           countryIso: 'UZ',
           text: address,

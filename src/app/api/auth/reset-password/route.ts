@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { hashPassword } from '@/lib/password';
+import { hashPassword, validatePasswordStrength } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -19,9 +19,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (newPassword.length < 6) {
+    const pwError = validatePasswordStrength(newPassword);
+    if (pwError) {
       return NextResponse.json(
-        { error: 'Mật khẩu mới phải có ít nhất 6 ký tự' },
+        { error: pwError },
         { status: 400 }
       );
     }

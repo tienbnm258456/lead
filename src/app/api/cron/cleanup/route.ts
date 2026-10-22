@@ -14,7 +14,14 @@ import { getSettings, toMs } from '@/lib/settings-cache';
  * 3. Xóa records quá hạn
  * 4. Log kết quả
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // H4 Fix: Verify cron secret to prevent unauthorized cleanup triggers
+  const cronSecret = request.headers.get('x-cron-secret');
+  const expectedSecret = process.env.CRON_SECRET || 'internal';
+  if (cronSecret !== expectedSecret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const settings = await getSettings();
 

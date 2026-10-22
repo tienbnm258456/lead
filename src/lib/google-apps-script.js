@@ -157,20 +157,22 @@ function colorStatusCells(sheet, startRow, data, statusColIndex) {
   var statusCol = statusColIndex + 1; // 0-based → 1-based
 
   for (var r = 0; r < data.length; r++) {
-    var status = String(data[r][statusColIndex]).toUpperCase();
+    var status = String(data[r][statusColIndex]);
+    var statusUpper = status.toUpperCase();
     var cell = sheet.getRange(startRow + r, statusCol);
     cell.setFontWeight('bold');
 
-    if (status === 'SUCCESS') {
+    // Match cả giá trị DB (SUCCESS/FAILED/PENDING/TIMEOUT) lẫn tiếng Việt
+    if (statusUpper === 'SUCCESS' || status === 'Thành công') {
       cell.setFontColor('#188038');
       cell.setBackground('#E6F4EA');
-    } else if (status === 'FAILED') {
+    } else if (statusUpper === 'FAILED' || status === 'Lỗi') {
       cell.setFontColor('#C5221F');
       cell.setBackground('#FCE8E6');
-    } else if (status === 'PENDING') {
+    } else if (statusUpper === 'PENDING' || status === 'Chờ đồng bộ') {
       cell.setFontColor('#E37400');
       cell.setBackground('#FEF7E0');
-    } else if (status === 'TIMEOUT') {
+    } else if (statusUpper === 'TIMEOUT' || status === 'Hết thời gian') {
       cell.setFontColor('#9334E6');
       cell.setBackground('#F3E8FD');
     }
@@ -183,21 +185,21 @@ function colorStatusCells(sheet, startRow, data, statusColIndex) {
 function formatFinal(sheet, headers, data) {
   var numCols = headers ? headers.length : (data && data.length > 0 ? data[0].length : 1);
 
-  // Column widths
+  // Column widths (13 cột A-M)
   var colWidths = {
-    1: 50,    // STT
-    2: 120,   // Mã đơn
-    3: 140,   // Tên khách
-    4: 130,   // SĐT
-    5: 250,   // Địa chỉ
-    6: 120,   // Tổng tiền
-    7: 300,   // Gói SP
-    8: 100,   // Tùy chọn
-    9: 150,   // Landing Page
-    10: 95,   // Trạng thái
-    11: 110,  // RetailCRM ID
-    12: 160,  // Ngày tạo
-    13: 160   // Đợt xuất
+    1: 160,   // A: Tên
+    2: 130,   // B: SĐT
+    3: 180,   // C: E-mail
+    4: 100,   // D: Đăng ký email
+    5: 160,   // E: Ngày đặt hàng
+    6: 140,   // F: ExternalId đơn hàng
+    7: 130,   // G: Trạng thái đơn hàng
+    8: 200,   // H: Tên sản phẩm
+    9: 80,    // I: Số lượng
+    10: 120,  // J: Giá bán
+    11: 250,  // K: Địa chỉ giao hàng
+    12: 130,  // L: Trạng thái thanh toán
+    13: 250,  // M: Ghi chú
   };
 
   for (var col in colWidths) {

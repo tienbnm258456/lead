@@ -31,10 +31,10 @@ export async function proxy(request: NextRequest) {
   }
 
   // ── Page routes: auth protection ──────────────────────────────────
-  const isAdminRoute = pathname.startsWith('/admin');
+  // C2: /register giờ là admin feature (cần đăng nhập)
+  const isAdminRoute = pathname.startsWith('/admin') || pathname === '/register';
   const isAuthPage =
     pathname === '/login' ||
-    pathname === '/register' ||
     pathname === '/forgot-password';
   const isRootRoute = pathname === '/';
 

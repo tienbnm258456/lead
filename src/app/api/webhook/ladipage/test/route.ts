@@ -86,6 +86,14 @@ function findMatchingVariant(
  *  - source = "ladipage-test"
  */
 export const POST = withLogger(async function POST(request: NextRequest) {
+  // L3 Fix: Block test endpoint in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { success: false, error: 'Test endpoint is disabled in production' },
+      { status: 403 },
+    );
+  }
+
   const apiKey = request.nextUrl.searchParams.get('api_key');
 
   if (!apiKey) {

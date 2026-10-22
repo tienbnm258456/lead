@@ -17,6 +17,8 @@ interface Order {
   customer_phone: string;
   delivery_address: string;
   total_price: string;
+  product_price: string;
+  delivery_fee: string;
   selected_package: string | null;
   selected_size: string | null;
   sync_status: string;
@@ -353,6 +355,8 @@ export default function OrdersPage() {
     { key: 'customer_name', label: 'Khách hàng' },
     { key: 'customer_phone', label: 'SĐT' },
     { key: 'delivery_address', label: 'Địa chỉ', noSort: true },
+    { key: 'product_price', label: 'Giá SP' },
+    { key: 'delivery_fee', label: 'Phí ship' },
     { key: 'total_price', label: 'Tổng tiền' },
     { key: 'selected_package', label: 'Gói SP', noSort: true },
     { key: 'selected_size', label: 'Tùy chọn', noSort: true },
@@ -583,7 +587,7 @@ export default function OrdersPage() {
                 </th>
                 {columns.map(col => {
                   // Right-align price header
-                  const align = col.key === 'total_price' ? 'text-right' : 'text-left';
+                  const align = ['product_price', 'delivery_fee', 'total_price'].includes(col.key) ? 'text-right' : 'text-left';
                   return (
                     <th key={col.key} className={`px-4 py-3.5 ${align}`}>
                       {col.noSort ? (
@@ -591,7 +595,7 @@ export default function OrdersPage() {
                       ) : (
                         <button
                           onClick={() => handleSort(col.key)}
-                          className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-80 ${col.key === 'total_price' ? 'ml-auto' : ''}`}
+                          className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-80 ${['product_price', 'delivery_fee', 'total_price'].includes(col.key) ? 'ml-auto' : ''}`}
                           style={{ color: 'var(--foreground)', opacity: 0.55 }}
                         >
                           {col.label} <SortIcon col={col.key} />
@@ -680,7 +684,15 @@ export default function OrdersPage() {
                         {order.delivery_address}
                       </span>
                     </td>
-                    {/* Total price — right-aligned */}
+                    {/* Giá sản phẩm — right-aligned */}
+                    <td className="px-4 py-3.5 text-sm font-mono tabular-nums whitespace-nowrap text-right" style={{ color: 'var(--foreground)' }}>
+                      {formatPrice(order.product_price)}
+                    </td>
+                    {/* Phí ship — right-aligned */}
+                    <td className="px-4 py-3.5 text-sm font-mono tabular-nums whitespace-nowrap text-right" style={{ color: Number(order.delivery_fee) > 0 ? 'var(--foreground)' : 'var(--disabled)' }}>
+                      {Number(order.delivery_fee) > 0 ? formatPrice(order.delivery_fee) : '0'}
+                    </td>
+                    {/* Tổng tiền — right-aligned, bold */}
                     <td className="px-4 py-3.5 text-sm font-semibold font-mono tabular-nums whitespace-nowrap text-right" style={{ color: 'var(--foreground)' }}>
                       {formatPrice(order.total_price)}
                     </td>

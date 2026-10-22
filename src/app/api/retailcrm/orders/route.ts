@@ -4,6 +4,7 @@ import {
   type RetailCrmOrderPayload,
   type RetailCrmSyncResult,
 } from '@/lib/retailcrm';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * POST /api/retailcrm/orders
@@ -35,6 +36,9 @@ import {
  * }
  */
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
 

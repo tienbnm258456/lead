@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * GET /api/orders/export
@@ -18,6 +19,9 @@ import ExcelJS from 'exceljs';
  * Side-effect: Đánh dấu exported_at + ghi ActivityLog.
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = request.nextUrl;
     const mode = searchParams.get('mode') || 'all';
@@ -68,7 +72,7 @@ export async function GET(request: NextRequest) {
     // ── Status mapping: DB → Russian label ──
     const STATUS_MAP: Record<string, string> = {
       SUCCESS: 'Thành công',
-      PENDING: 'Mới',
+      PENDING: 'Chờ đồng bộ',
       FAILED: 'Lỗi',
       TIMEOUT: 'Hết thời gian',
     };
@@ -79,33 +83,27 @@ export async function GET(request: NextRequest) {
         const items = JSON.parse(json);
         if (Array.isArray(items) && items.length > 0) return items[0];
       } catch { /* ignore */ }
-      return { productName: '', quantity: 1, initialPrice: 0 };
+      return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
     };
 
-    // ── Columns: Format RetailCRM (22 cột A-V) ──
+    // ── Columns: Format RetailCRM (13 cột A-M) ──
     const COLUMNS: Partial<ExcelJS.Column>[] = [
-      { header: 'Họ', key: 'lastName', width: 16 },
       { header: 'Tên (bắt buộc)', key: 'firstName', width: 22 },
-      { header: 'Tên đệm', key: 'middleName', width: 16 },
       { header: 'Số điện thoại', key: 'phone', width: 18 },
       { header: 'E-mail', key: 'email', width: 22 },
       { header: 'Đăng ký nhận email (có/không)', key: 'emailSub', width: 18 },
-      { header: 'ExternalId khách hàng', key: 'customerExtId', width: 18 },
-      { header: 'Quốc gia (bắt buộc)', key: 'country', width: 14 },
       { header: 'Ngày đặt hàng', key: 'orderDate', width: 20 },
-      { header: 'Số đơn hàng', key: 'orderNumber', width: 14 },
       { header: 'ExternalId đơn hàng', key: 'orderExtId', width: 18 },
+      { header: 'Loại đơn hàng', key: 'orderType', width: 22 },
       { header: 'Trạng thái đơn hàng', key: 'orderStatus', width: 16 },
-      { header: 'Loại đơn hàng (bắt buộc)', key: 'orderType', width: 20 },
       { header: 'Tên sản phẩm', key: 'productName', width: 30 },
       { header: 'Số lượng sản phẩm', key: 'quantity', width: 14 },
-      { header: 'Giá bán sản phẩm', key: 'salePrice', width: 18 },
-      { header: 'Loại hình giao hàng', key: 'deliveryType', width: 16 },
+      { header: 'Giá sản phẩm', key: 'salePrice', width: 18 },
+      { header: 'Phí vận chuyển', key: 'deliveryFee', width: 16 },
+      { header: 'Tổng tiền', key: 'totalPrice', width: 18 },
       { header: 'Địa chỉ giao hàng', key: 'deliveryAddr', width: 35 },
-      { header: 'Hình thức thanh toán', key: 'paymentType', width: 16 },
       { header: 'Trạng thái thanh toán', key: 'paymentStatus', width: 16 },
       { header: 'Ghi chú đơn hàng', key: 'comment', width: 35 },
-      { header: 'Ngày thanh toán đầy đủ', key: 'paymentDate', width: 20 },
     ];
 
     const styleHeader = (ws: ExcelJS.Worksheet) => {
@@ -115,8 +113,8 @@ export async function GET(request: NextRequest) {
       headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       headerRow.height = 32;
 
-      // Auto-filter (A1 → V1 = 22 cột)
-      ws.autoFilter = { from: 'A1', to: 'V1' };
+      // Auto-filter (A1 → P1 = 16 cột)
+      ws.autoFilter = { from: 'A1', to: 'P1' };
 
       // Freeze header row
       ws.views = [{ state: 'frozen', ySplit: 1 }];
@@ -124,36 +122,31 @@ export async function GET(request: NextRequest) {
 
     const addOrderRow = (ws: ExcelJS.Worksheet, order: typeof orders[0], index: number) => {
       const item = parseItems(order.items_json);
+      const deliveryFee = Number(item.deliveryFee) || 0;
+      const productPrice = Number(item.initialPrice) || 0;
 
-      // Ghép ghi chú từ gói SP + tùy chọn
+      // Ghép ghi chú từ gói SP + tùy chọn (không có LP vì đã tách cột riêng)
       const commentParts = [];
       if (order.selected_package) commentParts.push(`Gói: ${order.selected_package}`);
       if (order.selected_size) commentParts.push(`Size: ${order.selected_size}`);
-      if (order.landing_slug) commentParts.push(`LP: ${order.landing_slug}`);
 
       const row = ws.addRow({
-        lastName: '',
         firstName: order.customer_name,
-        middleName: '',
         phone: order.customer_phone,
         email: '',
         emailSub: 'không',
-        customerExtId: '',
-        country: 'UZ',
         orderDate: new Date(order.created_at).toLocaleString('vi-VN'),
-        orderNumber: order.id,
         orderExtId: order.external_id,
+        orderType: item.productName || order.landing_slug || '',
         orderStatus: STATUS_MAP[order.sync_status] || order.sync_status,
-        orderType: 'Cửa hàng trực tuyến',
-        productName: item.productName || order.selected_package || '',
+        productName: item.variantLabel || item.productName || '',
         quantity: item.quantity || 1,
-        salePrice: Number(order.total_price),
-        deliveryType: 'Giao hàng tận nơi',
+        salePrice: productPrice,
+        deliveryFee: deliveryFee,
+        totalPrice: Number(order.total_price),
         deliveryAddr: order.delivery_address,
-        paymentType: 'Tiền mặt',
         paymentStatus: 'Chưa thanh toán',
         comment: commentParts.join(', '),
-        paymentDate: '',
       });
 
       // Style alternate rows
@@ -198,8 +191,6 @@ export async function GET(request: NextRequest) {
       ws.getColumn('phone').numFmt = '@';
       // Price column to number format with thousands separator
       ws.getColumn('salePrice').numFmt = '#,##0';
-      // Order number centered
-      ws.getColumn('orderNumber').alignment = { horizontal: 'center' };
       ws.getColumn('quantity').alignment = { horizontal: 'center' };
     };
 

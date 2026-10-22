@@ -37,7 +37,8 @@ export async function GET(request: Request) {
   const startTime = Date.now();
 
   const cronSecret = request.headers.get('x-cron-secret');
-  if (cronSecret !== 'internal') {
+  const expectedSecret = process.env.CRON_SECRET || 'internal';
+  if (cronSecret !== expectedSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { AUTH_COOKIE_NAME, verifyAuthToken } from '@/lib/auth';
-import { hashPassword, verifyPassword } from '@/lib/password';
+import { hashPassword, verifyPassword, validatePasswordStrength } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
@@ -28,9 +28,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (newPassword.length < 6) {
+    const pwError = validatePasswordStrength(newPassword);
+    if (pwError) {
       return NextResponse.json(
-        { error: 'Mật khẩu mới phải có ít nhất 6 ký tự' },
+        { error: pwError },
         { status: 400 }
       );
     }

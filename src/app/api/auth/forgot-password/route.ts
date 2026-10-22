@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma';
  * POST /api/auth/forgot-password
  *
  * Tạo reset token cho user dựa vào username hoặc email.
- * Vì chưa có email service, token sẽ được trả về trực tiếp
- * (trong production nên gửi qua email).
+ * C3 Fix: Token KHÔNG được trả về trong response.
+ * Chỉ log server-side (dev) hoặc gửi qua email (production).
  */
 export async function POST(request: Request) {
   try {
@@ -55,15 +55,20 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log(`[Auth] Password reset requested for "${user.username}". Token: ${resetToken} (expires: ${resetExpiry.toISOString()})`);
+    // C3 Fix: Token KHÔNG trả về trong response (tránh account takeover)
+    // Chỉ log server-side để dev debug. Production nên gửi qua email.
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Auth] Password reset for "${user.username}". Token: ${resetToken} (expires: ${resetExpiry.toISOString()})`);
+    } else {
+      console.log(`[Auth] Password reset requested for "${user.username}".`);
+    }
+
+    // TODO: Gửi token qua email khi có email service
+    // await sendResetEmail(user.email, resetToken);
 
     return NextResponse.json({
       success: true,
-      message: 'Mã đặt lại mật khẩu đã được tạo.',
-      // In DEV mode, return token directly (production should send via email)
-      resetToken,
-      expiresAt: resetExpiry.toISOString(),
-      note: 'Trong môi trường development, token được trả về trực tiếp. Production nên gửi qua email.',
+      message: 'Nếu tài khoản tồn tại, mã đặt lại mật khẩu đã được tạo. Vui lòng kiểm tra email hoặc liên hệ admin.',
     });
   } catch (error) {
     console.error('Forgot password error:', error);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * POST /api/orders/bulk-delete
@@ -7,6 +8,9 @@ import { prisma } from '@/lib/prisma';
  * Body: { ids: number[] }
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { ids } = body as { ids: number[] };

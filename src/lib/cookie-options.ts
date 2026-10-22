@@ -1,44 +1,41 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Cookie Options — Dynamic secure flag based on request protocol
-//
-// Vấn đề: Khi deploy trên server dùng IP (không có HTTPS), process.env.NODE_ENV
-// không đáng tin vì PM2 có thể không load .env. Thay vào đó, ta detect protocol
-// trực tiếp từ request headers.
+// Cookie Options — Dynamic secure flag based on deployment config
 //
 // Quy tắc:
-//   - HTTPS (có domain + SSL) → secure: true, sameSite: 'strict'
-//   - HTTP  (IP trực tiếp)    → secure: false, sameSite: 'lax'
+//   - FORCE_HTTP=true (IP trực tiếp, chưa có SSL) → secure: false, sameSite: 'lax'
+//   - Production (có domain + SSL)                 → secure: true, sameSite: 'strict'
+//   - Development                                  → secure: false, sameSite: 'lax'
+//
+// ⚠️ KHÔNG dùng x-forwarded-proto từ client vì có thể bị spoofed.
+//    Dùng biến môi trường để xác định chế độ deploy.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest } from 'next/server';
 
 /**
- * Detect if the current request is over HTTPS.
+ * Detect if the deployment requires secure cookies.
  *
- * Checks multiple sources:
- * 1. x-forwarded-proto header (set by reverse proxies like nginx)
- * 2. Request URL protocol
- * 3. Fallback to NODE_ENV check
+ * Priority:
+ * 1. FORCE_HTTP=true → insecure (cho server dùng IP, chưa có SSL)
+ * 2. NODE_ENV=production → secure (yêu cầu HTTPS)
+ * 3. Development → insecure
  */
 function isSecureRequest(request?: NextRequest | Request): boolean {
-  if (request) {
-    // Check x-forwarded-proto (nginx/reverse proxy)
-    const forwardedProto = request.headers.get('x-forwarded-proto');
-    if (forwardedProto) {
-      return forwardedProto === 'https';
-    }
+  // Cho phép tắt secure cookie khi chưa có SSL (IP trực tiếp, chưa có domain)
+  if (process.env.FORCE_HTTP === 'true') return false;
 
-    // Check actual request URL
+  // Production mặc định bật secure (yêu cầu HTTPS)
+  if (process.env.NODE_ENV === 'production') return true;
+
+  // Development: check request protocol nếu có
+  if (request) {
     try {
       const url = new URL(request.url);
       if (url.protocol === 'https:') return true;
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
-  // Fallback: NODE_ENV (may not be reliable with PM2 without proper config)
-  return process.env.NODE_ENV === 'production' && !process.env.FORCE_HTTP;
+  return false;
 }
 
 export interface CookieSetOptions {

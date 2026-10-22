@@ -33,8 +33,9 @@ yarn-error.log*
 # PM2 logs
 /logs/*.log
 
-# env files (can opt-in for committing if needed)
+# env files (secrets KHÔNG được commit)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent skills
+.agents/

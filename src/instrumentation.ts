@@ -29,7 +29,7 @@ export async function register() {
     try {
       const res = await fetch(`${BASE_URL}/api/cron/cleanup`, {
         method: 'GET',
-        headers: { 'x-cron-secret': 'internal' },
+        headers: { 'x-cron-secret': process.env.CRON_SECRET || 'internal' },
       });
       if (res.ok) {
         const data = await res.json();
@@ -76,7 +76,7 @@ export async function register() {
     try {
       const res = await fetch(`${BASE_URL}/api/cron/export-sheets`, {
         method: 'GET',
-        headers: { 'x-cron-secret': 'internal' },
+        headers: { 'x-cron-secret': process.env.CRON_SECRET || 'internal' },
       });
       if (res.ok) {
         const data = await res.json();

@@ -91,3 +91,25 @@ export async function verifyPassword(
 
   return bufToHex(derivedBits) === hashHex;
 }
+
+/**
+ * Validate password strength.
+ * Returns error message or null if valid.
+ *
+ * Rules:
+ *   - Tối thiểu 8 ký tự
+ *   - Phải chứa ít nhất 1 chữ cái
+ *   - Phải chứa ít nhất 1 số
+ */
+export function validatePasswordStrength(password: string): string | null {
+  if (!password || password.length < 8) {
+    return 'Mật khẩu phải có ít nhất 8 ký tự';
+  }
+  if (!/[a-zA-Z]/.test(password)) {
+    return 'Mật khẩu phải chứa ít nhất 1 chữ cái';
+  }
+  if (!/[0-9]/.test(password)) {
+    return 'Mật khẩu phải chứa ít nhất 1 số';
+  }
+  return null;
+}

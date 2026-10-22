@@ -41,6 +41,7 @@ export interface RetailCrmOrderPayload {
   lastName?: string;
   delivery: {
     address: RetailCrmDeliveryAddress;
+    cost?: number; /// Phí vận chuyển (tách riêng, không cộng vào initialPrice)
   };
   items: RetailCrmOrderItem[];
 }
@@ -77,6 +78,8 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
     phone: data.phone,
     ...(data.lastName && { lastName: data.lastName }),
     delivery: {
+      // Phí vận chuyển tách riêng (không cộng vào initialPrice)
+      ...(data.delivery.cost !== undefined && { cost: data.delivery.cost }),
       address: {
         countryIso: data.delivery.address.countryIso || 'UZ',
         city: data.delivery.address.city || '',
@@ -86,7 +89,7 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
     items: data.items.map((item) => ({
       offer: { xmlId: item.xmlId },
       quantity: item.quantity,
-      initialPrice: item.initialPrice,
+      initialPrice: item.initialPrice, // Chỉ giá sản phẩm, KHÔNG có phí ship
     })),
   };
 }

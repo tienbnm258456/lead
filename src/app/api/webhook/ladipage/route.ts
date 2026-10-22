@@ -7,13 +7,7 @@ import {
 import { OrderSyncStatus } from '@prisma/client';
 import { withLogger } from '@/lib/api-logger';
 import { rateLimiter } from '@/lib/rate-limiter';
-
-/**
- * Generate a unique externalId from DB order id.
- */
-function generateExternalId(orderId: number): string {
-  return `ORD-${String(orderId).padStart(5, '0')}`;
-}
+import { generateExternalId } from '@/lib/order-id';
 
 /**
  * Find the best matching variant by comparing the selected option text.
@@ -294,6 +288,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
       firstName: name,
       phone,
       delivery: {
+        cost: Number(matchedVariant.delivery_fee) || 0, // Phí ship tách riêng
         address: {
           countryIso: 'UZ',
           text: address,
@@ -302,7 +297,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
       items: [{
         xmlId,
         quantity: matchedVariant.quantity,
-        initialPrice: matchedVariant.price,
+        initialPrice: matchedVariant.price, // Chỉ giá sản phẩm, KHÔNG có phí ship
       }],
     };
 

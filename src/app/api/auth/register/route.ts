@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
-import { hashPassword } from '@/lib/password';
+import { hashPassword, validatePasswordStrength } from '@/lib/password';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/require-auth';
 
 export async function POST(request: Request) {
   try {
+    // C2 Fix: Chỉ admin đã đăng nhập mới có thể tạo tài khoản mới
+    const auth = await requireAdmin();
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     const { username, password, name, email } = body;
 
@@ -30,10 +35,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate password strength
-    if (password.length < 6) {
+    // Validate password strength (M4: tối thiểu 8 ký tự + chữ + số)
+    const pwError = validatePasswordStrength(password);
+    if (pwError) {
       return NextResponse.json(
-        { error: 'Mật khẩu phải có ít nhất 6 ký tự' },
+        { error: pwError },
         { status: 400 }
       );
     }

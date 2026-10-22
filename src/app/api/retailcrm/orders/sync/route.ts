@@ -5,14 +5,8 @@ import {
   type RetailCrmOrderPayload,
 } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
-
-/**
- * Generate a unique externalId from DB order id.
- * Format: ORD-00001, ORD-00002, ...
- */
-function generateExternalId(orderId: number): string {
-  return `ORD-${String(orderId).padStart(5, '0')}`;
-}
+import { generateExternalId } from '@/lib/order-id';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * POST /api/retailcrm/orders/sync
@@ -38,6 +32,9 @@ function generateExternalId(orderId: number): string {
  * externalId is auto-generated as ORD-{orderId} (e.g. ORD-00001)
  */
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
 

@@ -81,64 +81,58 @@ export async function exportOrdersToGoogleSheets(
 
     const STATUS_MAP: Record<string, string> = {
       SUCCESS: 'Thành công',
-      PENDING: 'Mới',
+      PENDING: 'Chờ đồng bộ',
       FAILED: 'Lỗi',
       TIMEOUT: 'Hết thời gian',
     };
 
     const parseItems = (json: string | undefined) => {
       try {
-        if (!json) return { productName: '', quantity: 1, initialPrice: 0 };
+        if (!json) return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
         const items = JSON.parse(json);
         if (Array.isArray(items) && items.length > 0) return items[0];
       } catch { /* ignore */ }
-      return { productName: '', quantity: 1, initialPrice: 0 };
+      return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
     };
 
     const headers = [
-      'Họ', 'Tên (bắt buộc)', 'Tên đệm', 'Số điện thoại',
-      'E-mail', 'Đăng ký nhận email (có/không)', 'ExternalId khách hàng',
-      'Quốc gia (bắt buộc)', 'Ngày đặt hàng', 'Số đơn hàng',
-      'ExternalId đơn hàng', 'Trạng thái đơn hàng', 'Loại đơn hàng (bắt buộc)',
-      'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá bán sản phẩm',
-      'Loại hình giao hàng', 'Địa chỉ giao hàng', 'Hình thức thanh toán',
-      'Trạng thái thanh toán', 'Ghi chú đơn hàng', 'Ngày thanh toán đầy đủ',
+      'Tên (bắt buộc)', 'Số điện thoại',
+      'E-mail', 'Đăng ký nhận email (có/không)',
+      'Ngày đặt hàng', 'ExternalId đơn hàng', 'Loại đơn hàng', 'Trạng thái đơn hàng',
+      'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm',
+      'Phí vận chuyển', 'Tổng tiền',
+      'Địa chỉ giao hàng', 'Trạng thái thanh toán', 'Ghi chú đơn hàng',
     ];
 
-    // statusColIndex (0-based) = 11 → cột L (Статус заказа)
-    const statusColIndex = 11;
+    // statusColIndex (0-based) = 7 → cột H (Trạng thái đơn hàng) — shifted do thêm 'Loại đơn hàng'
+    const statusColIndex = 7;
 
     const rows = orders.map((order, idx) => {
       const item = parseItems(order.items_json);
+      const deliveryFee = Number(item.deliveryFee) || 0;
+      const productPrice = Number(item.initialPrice) || 0;
 
       const commentParts = [];
       if (order.selected_package) commentParts.push(`Gói: ${order.selected_package}`);
       if (order.selected_size) commentParts.push(`Size: ${order.selected_size}`);
-      if (order.landing_slug) commentParts.push(`LP: ${order.landing_slug}`);
 
       return [
-        '',                                                     // A: Фамилия
-        order.customer_name,                                    // B: Имя
-        '',                                                     // C: Отчество
-        order.customer_phone,                                   // D: Номер телефона
-        '',                                                     // E: E-mail
-        'không',                                                  // F: Đăng ký email
-        '',                                                     // G: ExternalId khách hàng
-        'UZ',                                                   // H: Quốc gia
-        new Date(order.created_at).toLocaleString('vi-VN'),     // I: Ngày đặt hàng
-        order.id || idx + 1,                                    // J: Số đơn hàng
-        order.external_id,                                      // K: ExternalId đơn hàng
-        STATUS_MAP[order.sync_status] || order.sync_status,     // L: Trạng thái đơn hàng
-        'Cửa hàng trực tuyến',                                     // M: Loại đơn hàng
-        item.productName || order.selected_package || '',       // N: Tên sản phẩm
-        item.quantity || 1,                                     // O: Số lượng
-        Number(order.total_price),                              // P: Giá bán
-        'Giao hàng tận nơi',                                       // Q: Loại giao hàng
-        order.delivery_address,                                 // R: Địa chỉ giao hàng
-        'Tiền mặt',                                             // S: Hình thức thanh toán
-        'Chưa thanh toán',                                           // T: Trạng thái thanh toán
-        commentParts.join(', '),                                // U: Ghi chú
-        '',                                                     // V: Ngày thanh toán
+        order.customer_name,                                    // A: Tên
+        order.customer_phone,                                   // B: Số điện thoại
+        '',                                                     // C: E-mail
+        'không',                                                // D: Đăng ký email
+        new Date(order.created_at).toLocaleString('vi-VN'),     // E: Ngày đặt hàng
+        order.external_id,                                      // F: ExternalId đơn hàng
+        item.productName || order.landing_slug || '',            // G: Loại đơn hàng
+        STATUS_MAP[order.sync_status] || order.sync_status,     // H: Trạng thái đơn hàng
+        item.variantLabel || item.productName || '',             // I: Tên sản phẩm
+        item.quantity || 1,                                     // J: Số lượng
+        productPrice,                                           // K: Giá sản phẩm
+        deliveryFee,                                            // L: Phí vận chuyển
+        Number(order.total_price),                              // M: Tổng tiền
+        order.delivery_address,                                 // N: Địa chỉ giao hàng
+        'Chưa thanh toán',                                      // O: Trạng thái thanh toán
+        commentParts.join(', '),                                // P: Ghi chú
       ];
     });
 

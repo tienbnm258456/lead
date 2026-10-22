@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
+import { requireAuth } from '@/lib/require-auth';
 
 /**
  * GET /api/orders
@@ -9,6 +10,9 @@ import { OrderSyncStatus } from '@prisma/client';
  * Supports filtering by landing_slug to view orders per landing page
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
@@ -74,8 +78,25 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // Parse delivery_fee từ items_json để tách giá SP và phí ship
+    const ordersWithFee = data.map(order => {
+      let deliveryFee = 0;
+      try {
+        const items = JSON.parse(order.items_json);
+        if (Array.isArray(items) && items.length > 0) {
+          deliveryFee = Number(items[0].deliveryFee) || 0;
+        }
+      } catch { /* ignore */ }
+      const totalPrice = Number(order.total_price);
+      return {
+        ...order,
+        product_price: String(totalPrice - deliveryFee),
+        delivery_fee: String(deliveryFee),
+      };
+    });
+
     return NextResponse.json({
-      data,
+      data: ordersWithFee,
       total,
       page,
       pageSize,
@@ -106,6 +127,9 @@ export async function GET(request: NextRequest) {
  *  4. Cập nhật sync_status + tạo OrderSyncLog
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { customer_name, customer_phone, delivery_address, total_price, selected_package, selected_size, landing_slug } = body;
@@ -114,14 +138,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
 
-    // Generate external_id
-    const lastOrder = await prisma.order.findFirst({ orderBy: { id: 'desc' }, select: { id: true } });
-    const nextId = (lastOrder?.id || 0) + 1;
-    const externalId = `MAN-${String(nextId).padStart(5, '0')}`;
+    // M6 Fix: Dùng TEMP ID trước, update sau khi có DB auto-increment ID (chống race condition)
+    const tempExternalId = `MAN-TEMP-${Date.now()}`;
 
     const order = await prisma.order.create({
       data: {
-        external_id: externalId,
+        external_id: tempExternalId,
         customer_name,
         customer_phone,
         delivery_address,
@@ -133,6 +155,14 @@ export async function POST(request: Request) {
         selected_size: selected_size || null,
         sync_status: 'PENDING',
       },
+    });
+
+    // M6 Fix: Update external_id với DB auto-increment ID (an toàn race condition)
+    const prefix = process.env.ORDER_PREFIX || 'ORD-';
+    const externalId = `MAN-${String(order.id).padStart(5, '0')}`;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { external_id: externalId },
     });
 
     console.log(`[Admin] Order #${order.id} created → externalId: ${externalId}`);

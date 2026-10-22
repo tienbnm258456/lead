@@ -153,8 +153,8 @@ model Order {
   // ── Nguồn đơn hàng ──
   source           String  @default("ladipage") @db.VarChar(100) /// Nguồn: "ladipage" (thật), "ladipage-test" (test), "api", "admin"
   landing_slug     String? @db.VarChar(100)                      /// Slug của product (để lọc đơn theo sản phẩm/trang)
-  selected_package String? @db.VarChar(500)                      /// Text gói đã chọn (nguyên bản từ LadiPage)
-  selected_size    String? @db.VarChar(50)                       /// Tùy chọn phụ đã chọn: size, kg... (nếu có)
+  selected_package String? @db.Text                         /// Text gói đã chọn (nguyên bản từ LadiPage, có thể chứa nhiều gói)
+  selected_size    String? @db.VarChar(500)                  /// Tùy chọn phụ đã chọn: size, kg... (có thể chứa nhiều size)
 
   // ── Đồng bộ RetailCRM ──
   sync_status  OrderSyncStatus @default(PENDING)  /// Trạng thái sync: PENDING → SUCCESS / FAILED / TIMEOUT
