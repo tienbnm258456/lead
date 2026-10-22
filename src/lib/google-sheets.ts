@@ -39,6 +39,7 @@ export interface OrderForExport {
   landing_slug: string | null;
   sync_status: string;
   retailcrm_id: number | null;
+  items_json?: string;
   created_at: Date | string;
 }
 
@@ -75,32 +76,71 @@ export async function exportOrdersToGoogleSheets(
 
     console.log(`[GoogleSheets] Exporting ${orders.length} orders → "${sheetName}"`);
 
-    // Format data rows
+    // Format data rows — RetailCRM tiếng Nga (22 cột A-V)
     const exportTimestamp = new Date().toLocaleString('vi-VN');
+
+    const STATUS_MAP: Record<string, string> = {
+      SUCCESS: 'Thành công',
+      PENDING: 'Mới',
+      FAILED: 'Lỗi',
+      TIMEOUT: 'Hết thời gian',
+    };
+
+    const parseItems = (json: string | undefined) => {
+      try {
+        if (!json) return { productName: '', quantity: 1, initialPrice: 0 };
+        const items = JSON.parse(json);
+        if (Array.isArray(items) && items.length > 0) return items[0];
+      } catch { /* ignore */ }
+      return { productName: '', quantity: 1, initialPrice: 0 };
+    };
+
     const headers = [
-      'STT', 'Mã đơn', 'Tên khách', 'SĐT', 'Địa chỉ',
-      'Tổng tiền (UZS)', 'Gói SP', 'Tùy chọn', 'Landing Page',
-      'Trạng thái', 'RetailCRM ID', 'Ngày tạo', 'Đợt xuất',
+      'Họ', 'Tên (bắt buộc)', 'Tên đệm', 'Số điện thoại',
+      'E-mail', 'Đăng ký nhận email (có/không)', 'ExternalId khách hàng',
+      'Quốc gia (bắt buộc)', 'Ngày đặt hàng', 'Số đơn hàng',
+      'ExternalId đơn hàng', 'Trạng thái đơn hàng', 'Loại đơn hàng (bắt buộc)',
+      'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá bán sản phẩm',
+      'Loại hình giao hàng', 'Địa chỉ giao hàng', 'Hình thức thanh toán',
+      'Trạng thái thanh toán', 'Ghi chú đơn hàng', 'Ngày thanh toán đầy đủ',
     ];
 
-    // statusColIndex (0-based) = 9 → cột J (Trạng thái)
-    const statusColIndex = 9;
+    // statusColIndex (0-based) = 11 → cột L (Статус заказа)
+    const statusColIndex = 11;
 
-    const rows = orders.map((order, idx) => [
-      idx + 1, // STT tạm — Apps Script sẽ tính lại khi append
-      order.external_id,
-      order.customer_name,
-      order.customer_phone,
-      order.delivery_address,
-      Number(order.total_price),
-      order.selected_package || '',
-      order.selected_size || '',
-      order.landing_slug || '',
-      order.sync_status,
-      order.retailcrm_id || '',
-      new Date(order.created_at).toLocaleString('vi-VN'),
-      exportTimestamp, // Đợt xuất — cùng timestamp cho toàn bộ batch
-    ]);
+    const rows = orders.map((order, idx) => {
+      const item = parseItems(order.items_json);
+
+      const commentParts = [];
+      if (order.selected_package) commentParts.push(`Gói: ${order.selected_package}`);
+      if (order.selected_size) commentParts.push(`Size: ${order.selected_size}`);
+      if (order.landing_slug) commentParts.push(`LP: ${order.landing_slug}`);
+
+      return [
+        '',                                                     // A: Фамилия
+        order.customer_name,                                    // B: Имя
+        '',                                                     // C: Отчество
+        order.customer_phone,                                   // D: Номер телефона
+        '',                                                     // E: E-mail
+        'không',                                                  // F: Đăng ký email
+        '',                                                     // G: ExternalId khách hàng
+        'UZ',                                                   // H: Quốc gia
+        new Date(order.created_at).toLocaleString('vi-VN'),     // I: Ngày đặt hàng
+        order.id || idx + 1,                                    // J: Số đơn hàng
+        order.external_id,                                      // K: ExternalId đơn hàng
+        STATUS_MAP[order.sync_status] || order.sync_status,     // L: Trạng thái đơn hàng
+        'Cửa hàng trực tuyến',                                     // M: Loại đơn hàng
+        item.productName || order.selected_package || '',       // N: Tên sản phẩm
+        item.quantity || 1,                                     // O: Số lượng
+        Number(order.total_price),                              // P: Giá bán
+        'Giao hàng tận nơi',                                       // Q: Loại giao hàng
+        order.delivery_address,                                 // R: Địa chỉ giao hàng
+        'Tiền mặt',                                             // S: Hình thức thanh toán
+        'Chưa thanh toán',                                           // T: Trạng thái thanh toán
+        commentParts.join(', '),                                // U: Ghi chú
+        '',                                                     // V: Ngày thanh toán
+      ];
+    });
 
     // Send in batches (5,000 rows per request to stay under Apps Script limits)
     const BATCH_SIZE = 5_000;

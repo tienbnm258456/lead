@@ -65,19 +65,47 @@ export async function GET(request: NextRequest) {
 
     const today = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '_');
 
+    // ── Status mapping: DB → Russian label ──
+    const STATUS_MAP: Record<string, string> = {
+      SUCCESS: 'Thành công',
+      PENDING: 'Mới',
+      FAILED: 'Lỗi',
+      TIMEOUT: 'Hết thời gian',
+    };
+
+    // ── Parse items_json helper ──
+    const parseItems = (json: string) => {
+      try {
+        const items = JSON.parse(json);
+        if (Array.isArray(items) && items.length > 0) return items[0];
+      } catch { /* ignore */ }
+      return { productName: '', quantity: 1, initialPrice: 0 };
+    };
+
+    // ── Columns: Format RetailCRM (22 cột A-V) ──
     const COLUMNS: Partial<ExcelJS.Column>[] = [
-      { header: 'STT', key: 'stt', width: 6 },
-      { header: 'Mã đơn', key: 'external_id', width: 16 },
-      { header: 'Tên khách hàng', key: 'customer_name', width: 22 },
-      { header: 'Số điện thoại', key: 'customer_phone', width: 18 },
-      { header: 'Địa chỉ', key: 'delivery_address', width: 35 },
-      { header: 'Gói sản phẩm', key: 'selected_package', width: 30 },
-      { header: 'Tùy chọn phụ', key: 'selected_size', width: 15 },
-      { header: 'Tổng tiền (UZS)', key: 'total_price', width: 18 },
-      { header: 'Nguồn', key: 'source', width: 14 },
-      { header: 'Trạng thái sync', key: 'sync_status', width: 16 },
-      { header: 'RetailCRM ID', key: 'retailcrm_id', width: 14 },
-      { header: 'Ngày tạo', key: 'created_at', width: 20 },
+      { header: 'Họ', key: 'lastName', width: 16 },
+      { header: 'Tên (bắt buộc)', key: 'firstName', width: 22 },
+      { header: 'Tên đệm', key: 'middleName', width: 16 },
+      { header: 'Số điện thoại', key: 'phone', width: 18 },
+      { header: 'E-mail', key: 'email', width: 22 },
+      { header: 'Đăng ký nhận email (có/không)', key: 'emailSub', width: 18 },
+      { header: 'ExternalId khách hàng', key: 'customerExtId', width: 18 },
+      { header: 'Quốc gia (bắt buộc)', key: 'country', width: 14 },
+      { header: 'Ngày đặt hàng', key: 'orderDate', width: 20 },
+      { header: 'Số đơn hàng', key: 'orderNumber', width: 14 },
+      { header: 'ExternalId đơn hàng', key: 'orderExtId', width: 18 },
+      { header: 'Trạng thái đơn hàng', key: 'orderStatus', width: 16 },
+      { header: 'Loại đơn hàng (bắt buộc)', key: 'orderType', width: 20 },
+      { header: 'Tên sản phẩm', key: 'productName', width: 30 },
+      { header: 'Số lượng sản phẩm', key: 'quantity', width: 14 },
+      { header: 'Giá bán sản phẩm', key: 'salePrice', width: 18 },
+      { header: 'Loại hình giao hàng', key: 'deliveryType', width: 16 },
+      { header: 'Địa chỉ giao hàng', key: 'deliveryAddr', width: 35 },
+      { header: 'Hình thức thanh toán', key: 'paymentType', width: 16 },
+      { header: 'Trạng thái thanh toán', key: 'paymentStatus', width: 16 },
+      { header: 'Ghi chú đơn hàng', key: 'comment', width: 35 },
+      { header: 'Ngày thanh toán đầy đủ', key: 'paymentDate', width: 20 },
     ];
 
     const styleHeader = (ws: ExcelJS.Worksheet) => {
@@ -85,29 +113,47 @@ export async function GET(request: NextRequest) {
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
       headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-      headerRow.height = 28;
+      headerRow.height = 32;
 
-      // Auto-filter
-      ws.autoFilter = { from: 'A1', to: `L1` };
+      // Auto-filter (A1 → V1 = 22 cột)
+      ws.autoFilter = { from: 'A1', to: 'V1' };
 
       // Freeze header row
       ws.views = [{ state: 'frozen', ySplit: 1 }];
     };
 
     const addOrderRow = (ws: ExcelJS.Worksheet, order: typeof orders[0], index: number) => {
+      const item = parseItems(order.items_json);
+
+      // Ghép ghi chú từ gói SP + tùy chọn
+      const commentParts = [];
+      if (order.selected_package) commentParts.push(`Gói: ${order.selected_package}`);
+      if (order.selected_size) commentParts.push(`Size: ${order.selected_size}`);
+      if (order.landing_slug) commentParts.push(`LP: ${order.landing_slug}`);
+
       const row = ws.addRow({
-        stt: index + 1,
-        external_id: order.external_id,
-        customer_name: order.customer_name,
-        customer_phone: order.customer_phone, // Will force text format below
-        delivery_address: order.delivery_address,
-        selected_package: order.selected_package || '',
-        selected_size: order.selected_size || '',
-        total_price: Number(order.total_price),
-        source: order.source,
-        sync_status: order.sync_status,
-        retailcrm_id: order.retailcrm_id || '',
-        created_at: new Date(order.created_at).toLocaleString('vi-VN'),
+        lastName: '',
+        firstName: order.customer_name,
+        middleName: '',
+        phone: order.customer_phone,
+        email: '',
+        emailSub: 'không',
+        customerExtId: '',
+        country: 'UZ',
+        orderDate: new Date(order.created_at).toLocaleString('vi-VN'),
+        orderNumber: order.id,
+        orderExtId: order.external_id,
+        orderStatus: STATUS_MAP[order.sync_status] || order.sync_status,
+        orderType: 'Cửa hàng trực tuyến',
+        productName: item.productName || order.selected_package || '',
+        quantity: item.quantity || 1,
+        salePrice: Number(order.total_price),
+        deliveryType: 'Giao hàng tận nơi',
+        deliveryAddr: order.delivery_address,
+        paymentType: 'Tiền mặt',
+        paymentStatus: 'Chưa thanh toán',
+        comment: commentParts.join(', '),
+        paymentDate: '',
       });
 
       // Style alternate rows
@@ -127,16 +173,34 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      // Tô màu trạng thái
+      const statusCell = row.getCell('orderStatus');
+      switch (order.sync_status) {
+        case 'SUCCESS':
+          statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+          break;
+        case 'FAILED':
+          statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          break;
+        case 'TIMEOUT':
+          statusCell.font = { color: { argb: 'FFEA580C' }, bold: true };
+          break;
+        case 'PENDING':
+          statusCell.font = { color: { argb: 'FFD97706' }, bold: true };
+          break;
+      }
+
       return row;
     };
 
     const formatSheet = (ws: ExcelJS.Worksheet) => {
       // Force phone column to text format
-      ws.getColumn('customer_phone').numFmt = '@';
+      ws.getColumn('phone').numFmt = '@';
       // Price column to number format with thousands separator
-      ws.getColumn('total_price').numFmt = '#,##0';
-      // STT column centered
-      ws.getColumn('stt').alignment = { horizontal: 'center' };
+      ws.getColumn('salePrice').numFmt = '#,##0';
+      // Order number centered
+      ws.getColumn('orderNumber').alignment = { horizontal: 'center' };
+      ws.getColumn('quantity').alignment = { horizontal: 'center' };
     };
 
     if (mode === 'all' && !landingSlug) {
