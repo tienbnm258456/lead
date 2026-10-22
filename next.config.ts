@@ -9,14 +9,6 @@ const nextConfig: NextConfig = {
       fullUrl: true,
     },
   },
-  // Tắt client-side router cache — mỗi lần navigate luôn fetch data mới từ server
-  // Mặc định Next.js cache 30s (dynamic) / 5min (static) → hiển thị data cũ
-  experimental: {
-    staleTimes: {
-      dynamic: 0,
-      static: 30, // Minimum cho phép là 30
-    },
-  },
   turbopack: {
     rules: {
       "*.css": {
@@ -25,11 +17,11 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  // L2 Fix: Security headers
+  // Security headers: Áp dụng cho page routes, loại trừ _next (HMR/static) để tránh xung đột WebSocket/HMR dev server
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/((?!_next|favicon.ico).*)',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
