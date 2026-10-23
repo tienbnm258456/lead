@@ -17,6 +17,29 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // Ngăn Prisma + ExcelJS bị bundle → giảm reload do module resolution
+  serverExternalPackages: ['@prisma/client', 'exceljs'],
+  // Giảm reload do file watcher detect thay đổi ở file không liên quan
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.next/**',
+          '**/prisma/migrations/**',
+          '**/assets/**',
+          '**/*.docx',
+          '**/*.xlsx',
+          '**/.git/**',
+        ],
+        // Dùng polling interval dài hơn → giảm CPU + giảm false trigger
+        poll: 1000,
+        aggregateTimeout: 300,
+      };
+    }
+    return config;
+  },
   // Security headers: Áp dụng cho page routes, loại trừ _next (HMR/static) để tránh xung đột WebSocket/HMR dev server
   async headers() {
     return [

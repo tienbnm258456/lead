@@ -55,6 +55,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Filter by export status
+    const exportStatus = searchParams.get('exportStatus') || '';
+    if (exportStatus === 'not_exported') {
+      where.exported_at = null;
+    } else if (exportStatus === 'exported') {
+      where.exported_at = { not: null };
+    }
+
     // Validate sortBy to prevent injection
     const allowedSortFields = ['external_id', 'customer_name', 'customer_phone', 'total_price', 'sync_status', 'created_at', 'landing_slug'];
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';

@@ -74,6 +74,7 @@ interface OrderFilters {
   landingSlug?: string;
   dateFrom?: string;
   dateTo?: string;
+  exportStatus?: string;
   page?: number;
   pageSize?: number;
   sortBy?: string;
@@ -104,6 +105,7 @@ async function fetchOrders(filters: OrderFilters): Promise<OrdersResponse> {
   if (filters.landingSlug) params.set('landingSlug', filters.landingSlug);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
+  if (filters.exportStatus) params.set('exportStatus', filters.exportStatus);
   if (filters.sortBy) params.set('sortBy', filters.sortBy);
   if (filters.sortOrder) params.set('sortOrder', filters.sortOrder);
   const res = await fetch(`/api/orders?${params}`);
@@ -302,6 +304,7 @@ export default function OrdersPage() {
       if (filters.landingSlug) params.set('landingSlug', filters.landingSlug);
       if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      if (filters.exportStatus) params.set('exportStatus', filters.exportStatus);
       window.open(`/api/orders/export?${params}`, '_blank');
       toast.success('Đang tải file Excel...');
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['orders'] }), 2000);
@@ -371,7 +374,7 @@ export default function OrdersPage() {
   };
 
   // Get the active filter count to show on the filter button
-  const activeFilterCount = [filters.status, filters.landingSlug, filters.dateFrom, filters.dateTo].filter(Boolean).length;
+  const activeFilterCount = [filters.status, filters.landingSlug, filters.dateFrom, filters.dateTo, filters.exportStatus].filter(Boolean).length;
 
   const btnBase = "flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all";
 
@@ -497,11 +500,25 @@ export default function OrdersPage() {
                 onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value, page: 1 }))}
               />
             </div>
+            {/* Export status filter */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Trạng thái xuất</label>
+              <select
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                value={filters.exportStatus || ''}
+                onChange={e => setFilters(p => ({ ...p, exportStatus: e.target.value, page: 1 }))}
+              >
+                <option value="">Tất cả</option>
+                <option value="not_exported">Chưa xuất Excel</option>
+                <option value="exported">Đã xuất Excel</option>
+              </select>
+            </div>
             {/* Clear all filters */}
             {activeFilterCount > 0 && (
               <div className="col-span-full flex justify-end">
                 <button
-                  onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', page: 1 }))}
+                  onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', exportStatus: '', page: 1 }))}
                   className="text-xs font-medium text-indigo-500 hover:text-indigo-400 transition-colors"
                 >
                   Xóa tất cả bộ lọc
@@ -513,7 +530,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Active filter tags */}
-      {(filters.landingSlug || filters.status || filters.dateFrom || filters.dateTo) && (
+      {(filters.landingSlug || filters.status || filters.dateFrom || filters.dateTo || filters.exportStatus) && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Đang lọc:</span>
           {filters.landingSlug && (
@@ -548,8 +565,16 @@ export default function OrdersPage() {
               </button>
             </span>
           )}
+          {filters.exportStatus && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+              {filters.exportStatus === 'not_exported' ? 'Chưa xuất Excel' : 'Đã xuất Excel'}
+              <button onClick={() => setFilters(p => ({ ...p, exportStatus: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
           <button
-            onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', page: 1 }))}
+            onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', exportStatus: '', page: 1 }))}
             className="text-xs font-medium text-red-500 hover:text-red-400 transition-colors"
           >
             Xóa tất cả

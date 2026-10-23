@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -14,6 +14,7 @@ import {
   LogOut,
   HardDrive,
   KeyRound,
+  Users,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -45,9 +46,16 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
 
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => {
+      if (d.role) setUserRole(d.role);
+    }).catch(() => {});
+  }, []);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -138,6 +146,50 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {/* Menu Tài khoản — chỉ hiện cho ADMIN */}
+        {userRole === 'ADMIN' && (
+          <>
+            {!collapsed && (
+              <p className="mt-4 mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--sidebar-icon)' }}>
+                Quản trị
+              </p>
+            )}
+            <Link
+              href="/admin/accounts"
+              className={cn(
+                'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                (pathname === '/admin/accounts' || pathname?.startsWith('/admin/accounts'))
+                  ? 'shadow-sm'
+                  : 'hover:translate-x-0.5'
+              )}
+              style={{
+                background: pathname === '/admin/accounts' ? 'var(--sidebar-active)' : 'transparent',
+                color: pathname === '/admin/accounts' ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+              }}
+              onMouseEnter={(e) => {
+                if (pathname !== '/admin/accounts') {
+                  e.currentTarget.style.background = 'var(--sidebar-hover)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (pathname !== '/admin/accounts') {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <Users
+                className={cn(
+                  'h-5 w-5 shrink-0 transition-colors',
+                  pathname === '/admin/accounts' ? '' : 'group-hover:text-[var(--foreground)]'
+                )}
+                style={{
+                  color: pathname === '/admin/accounts' ? 'var(--sidebar-active-text)' : 'var(--sidebar-icon)',
+                }}
+              />
+              {!collapsed && <span>Tài khoản</span>}
+            </Link>
+          </>
+        )}
       </nav>
 
       {/* Bottom Area: Change Password, Logout & DB info */}

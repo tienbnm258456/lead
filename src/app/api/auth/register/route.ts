@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         password_hash: passwordHash,
         name: name.trim(),
         email: email ? email.trim().toLowerCase() : null,
-        role: 'ADMIN',
+        role: 'USER',
         active: true,
       },
     });

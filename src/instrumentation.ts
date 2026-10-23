@@ -18,6 +18,15 @@
 
 export async function register() {
   if (typeof window !== 'undefined') return;
+
+  // ── Skip background jobs trong dev mode ──────────────────────────
+  // Instrumentation fetch vào chính dev server → trigger recompile → loop reload.
+  // Chỉ chạy background jobs ở production (next start / PM2).
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Instrumentation] DEV MODE — background jobs disabled (tránh reload loop)');
+    return;
+  }
+
   await new Promise(resolve => setTimeout(resolve, 2000));
 
   const BASE_URL = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

@@ -34,18 +34,19 @@ export default function ChangePasswordPage() {
 
   // Password strength
   const getPasswordStrength = (pass: string) => {
-    if (!pass) return { level: 0, label: '', color: '' };
+    if (!pass) return { level: 0, label: '', color: '', errors: [] as string[] };
+    const errors: string[] = [];
     let score = 0;
-    if (pass.length >= 6) score++;
-    if (pass.length >= 8) score++;
+    if (pass.length >= 8) score++; else errors.push('Tối thiểu 8 ký tự');
+    if (/[a-zA-Z]/.test(pass)) score++; else errors.push('Cần ít nhất 1 chữ cái');
+    if (/[0-9]/.test(pass)) score++; else errors.push('Cần ít nhất 1 số');
     if (/[A-Z]/.test(pass)) score++;
-    if (/[0-9]/.test(pass)) score++;
     if (/[^A-Za-z0-9]/.test(pass)) score++;
 
-    if (score <= 1) return { level: 1, label: 'Yếu', color: 'bg-red-500' };
-    if (score <= 2) return { level: 2, label: 'Trung bình', color: 'bg-amber-500' };
-    if (score <= 3) return { level: 3, label: 'Khá', color: 'bg-blue-500' };
-    return { level: 4, label: 'Mạnh', color: 'bg-emerald-500' };
+    if (score <= 1) return { level: 1, label: 'Yếu', color: 'bg-red-500', errors };
+    if (score <= 2) return { level: 2, label: 'Trung bình', color: 'bg-amber-500', errors };
+    if (score <= 3) return { level: 3, label: 'Khá', color: 'bg-blue-500', errors };
+    return { level: 4, label: 'Mạnh', color: 'bg-emerald-500', errors };
   };
 
   const strength = getPasswordStrength(newPassword);
@@ -58,8 +59,16 @@ export default function ChangePasswordPage() {
       setError('Vui lòng nhập mật khẩu hiện tại');
       return;
     }
-    if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự');
+    if (newPassword.length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự');
+      return;
+    }
+    if (!/[a-zA-Z]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 chữ cái');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 số');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -246,7 +255,7 @@ export default function ChangePasswordPage() {
                     type={showNew ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
-                    placeholder="Tối thiểu 6 ký tự"
+                    placeholder="Tối thiểu 8 ký tự (chữ + số)"
                     className="w-full rounded-xl border pl-10 pr-11 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500"
                     style={{
                       background: 'var(--muted)',
@@ -285,6 +294,13 @@ export default function ChangePasswordPage() {
                     <p className="text-[10px] font-medium" style={{ color: 'var(--muted-foreground)' }}>
                       Độ mạnh: <span className={strength.level >= 3 ? 'text-emerald-500' : strength.level >= 2 ? 'text-amber-500' : 'text-red-500'}>{strength.label}</span>
                     </p>
+                    {strength.errors.length > 0 && (
+                      <div className="space-y-0.5 pt-0.5">
+                        {strength.errors.map((err, i) => (
+                          <p key={i} className="text-[10px] text-red-400">• {err}</p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

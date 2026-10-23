@@ -53,6 +53,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Filter by export status
+    const exportStatus = searchParams.get('exportStatus') || '';
+    if (exportStatus === 'not_exported') {
+      where.exported_at = null;
+    } else if (exportStatus === 'exported') {
+      where.exported_at = { not: null };
+    }
+
     const orders = await prisma.order.findMany({
       where,
       orderBy: { created_at: 'desc' },

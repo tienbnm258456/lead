@@ -265,7 +265,8 @@ model SystemSetting {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum AdminRole {
-  ADMIN  // Toàn quyền
+  ADMIN  // Toàn quyền (bao gồm quản lý tài khoản)
+  USER   // Full quyền trừ quản lý tài khoản
   VIEWER // Chỉ xem
 }
 
