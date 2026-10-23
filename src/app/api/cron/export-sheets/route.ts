@@ -121,9 +121,11 @@ export async function GET(request: Request) {
 
     console.log(`${TAG} 📅 Period: "${periodLabel}"`);
 
-    // ── Export ──
+    // ── Export (với progressive marking) ──
     console.log(`${TAG} 📤 Đang gửi data lên Google Sheets...`);
     const exportStart = Date.now();
+    const orderIds = orders.map(o => o.id);
+
     const result = await exportOrdersToGoogleSheets(
       orders.map(o => ({
         ...o,
@@ -131,6 +133,15 @@ export async function GET(request: Request) {
         created_at: o.created_at,
       })),
       periodLabel,
+      // Progressive marking: đánh dấu từng batch ngay khi gửi thành công
+      // → Nếu crash giữa chừng, batch đã gửi sẽ không bị gửi lại
+      async (batchOrderIds) => {
+        await prisma.order.updateMany({
+          where: { id: { in: batchOrderIds } },
+          data: { sheets_exported_at: new Date() },
+        });
+        console.log(`${TAG} ✏️  Đã đánh dấu ${batchOrderIds.length} orders (progressive)`);
+      },
     );
     const exportDuration = Date.now() - exportStart;
 
@@ -142,29 +153,50 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 });
     }
 
-    // ── Mark exported ──
-    console.log(`${TAG} ✏️  Đánh dấu ${orders.length} orders đã xuất...`);
-    await prisma.order.updateMany({
-      where: { id: { in: orders.map(o => o.id) } },
-      data: { sheets_exported_at: new Date() },
-    });
-
-    // ── Log ──
+    // ── Log EXPORT ──
     await prisma.activityLog.create({
       data: { action: 'EXPORT', count: orders.length, note: `[Google Sheets] ${orders.length} đơn → "${result.sheetName}"` },
     });
 
-    console.log(`${TAG} ✅ SUCCESS — ${orders.length} đơn → "${result.sheetName}"`);
+    console.log(`${TAG} ✅ EXPORTED — ${orders.length} đơn → "${result.sheetName}"`);
     console.log(`${TAG} 🔗 ${result.spreadsheetUrl}`);
-    console.log(`${TAG} ⏱️  Export: ${exportDuration}ms | Total: ${Date.now() - startTime}ms`);
+    console.log(`${TAG} ⏱️  Export: ${exportDuration}ms`);
+
+    // ── Auto-Cleanup: Xóa đơn đã xuất thành công khỏi DB ──
+    // Xóa theo danh sách ID cụ thể (không dùng điều kiện mở) → an toàn, không ảnh hưởng đơn mới
+    console.log(`${TAG} 🗑️  Auto-cleanup: xóa ${orderIds.length} đơn đã xuất khỏi DB...`);
+
+    // 1. Xóa sync logs trước (FK constraint)
+    const deletedSyncLogs = await prisma.orderSyncLog.deleteMany({
+      where: { order_id: { in: orderIds } },
+    });
+
+    // 2. Xóa orders
+    const purgeResult = await prisma.order.deleteMany({
+      where: { id: { in: orderIds } },
+    });
+
+    // 3. Log PURGE
+    await prisma.activityLog.create({
+      data: {
+        action: 'PURGE',
+        count: purgeResult.count,
+        note: `[Auto] Dọn ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs sau khi xuất Google Sheets "${result.sheetName}"`,
+      },
+    });
+
+    console.log(`${TAG} 🗑️  Đã xóa ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs`);
+    console.log(`${TAG} ⏱️  Total: ${Date.now() - startTime}ms`);
     console.log(`${TAG} ──────────────────────────────────────`);
 
     return NextResponse.json({
       success: true,
-      message: `Đã xuất ${orders.length} đơn hàng lên Google Sheets`,
+      message: `Đã xuất ${orders.length} đơn hàng lên Google Sheets và dọn dẹp DB`,
       sheetName: result.sheetName,
       totalRows: result.totalRows,
       spreadsheetUrl: result.spreadsheetUrl,
+      purgedOrders: purgeResult.count,
+      purgedSyncLogs: deletedSyncLogs.count,
     });
   } catch (error) {
     console.error(`${TAG} 💥`, error instanceof Error ? error.message : error);

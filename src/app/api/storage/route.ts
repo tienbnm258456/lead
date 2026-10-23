@@ -145,11 +145,16 @@ export async function DELETE(request: Request) {
     }
 
     const exportedCount = await prisma.order.count({
-      where: { exported_at: { not: null } },
+      where: {
+        OR: [
+          { exported_at: { not: null } },
+          { sheets_exported_at: { not: null } },
+        ],
+      },
     });
 
     if (exportedCount === 0) {
-      return NextResponse.json({ success: false, error: 'Không có đơn hàng đã xuất để dọn dẹp' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Không có đơn hàng đã xuất (Excel/Sheets) để dọn dẹp' }, { status: 400 });
     }
 
     // ── Read dynamic cleanup settings (from cache) ──
@@ -166,7 +171,12 @@ export async function DELETE(request: Request) {
 
     // 1. Delete sync logs of exported orders
     const exportedOrderIds = await prisma.order.findMany({
-      where: { exported_at: { not: null } },
+      where: {
+        OR: [
+          { exported_at: { not: null } },
+          { sheets_exported_at: { not: null } },
+        ],
+      },
       select: { id: true },
     });
     const ids = exportedOrderIds.map(o => o.id);
@@ -177,7 +187,12 @@ export async function DELETE(request: Request) {
 
     // 2. Delete exported orders
     const result = await prisma.order.deleteMany({
-      where: { exported_at: { not: null } },
+      where: {
+        OR: [
+          { exported_at: { not: null } },
+          { sheets_exported_at: { not: null } },
+        ],
+      },
     });
 
     // 3. Auto-cleanup: activity_logs theo cấu hình
@@ -196,7 +211,7 @@ export async function DELETE(request: Request) {
       data: {
         action: 'PURGE',
         count: result.count,
-        note: `Dọn ${result.count} đơn đã xuất Excel` +
+        note: `Dọn ${result.count} đơn đã xuất (Excel/Sheets)` +
           (oldLogs.count > 0 ? ` · ${oldLogs.count} activity logs (>${settings.activity_log_cleanup_value} ${unitLabels[settings.activity_log_cleanup_unit] || settings.activity_log_cleanup_unit})` : '') +
           (oldSyncLogs.count > 0 ? ` · ${oldSyncLogs.count} sync logs (>${settings.sync_log_cleanup_value} ${unitLabels[settings.sync_log_cleanup_unit] || settings.sync_log_cleanup_unit})` : ''),
       },
@@ -204,7 +219,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Đã xóa ${result.count} đơn hàng đã xuất Excel`,
+      message: `Đã xóa ${result.count} đơn hàng đã xuất (Excel/Sheets)`,
       deletedCount: result.count,
       cleanedActivityLogs: oldLogs.count,
       cleanedSyncLogs: oldSyncLogs.count,

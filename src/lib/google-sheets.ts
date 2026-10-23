@@ -65,6 +65,7 @@ function getWebAppUrl(): string {
 export async function exportOrdersToGoogleSheets(
   orders: OrderForExport[],
   periodLabel?: string,
+  onBatchSuccess?: (batchOrderIds: number[]) => Promise<void>,
 ): Promise<SheetExportResult> {
   try {
     const webAppUrl = getWebAppUrl();
@@ -176,6 +177,13 @@ export async function exportOrdersToGoogleSheets(
 
       if (result.spreadsheetUrl) {
         spreadsheetUrl = result.spreadsheetUrl;
+      }
+
+      // Progressive marking: đánh dấu batch đã xuất thành công ngay lập tức
+      // → Nếu crash giữa chừng, batch đã gửi sẽ không bị gửi lại lần sau
+      if (onBatchSuccess) {
+        const batchOrders = orders.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+        await onBatchSuccess(batchOrders.map(o => o.id));
       }
     }
 
