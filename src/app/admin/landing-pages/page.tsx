@@ -276,8 +276,8 @@ export default function LandingPagesPage() {
   };
 
   const getWebhookUrl = (apiKey: string) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-domain';
-    return `${baseUrl}/api/webhook/ladipage?api_key=${apiKey}`;
+    const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.bigboxfulfillment.vn').replace(/\/+$/, '');
+    return `${baseUrl}/api/webhook/ladipage?api_key=${encodeURIComponent(apiKey)}`;
   };
 
   const btnBase = 'flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all';
