@@ -1,3 +1,4 @@
+import { ensureOfferXmlIds, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, type RetailCrmOrderPayload } from '@/lib/retailcrm';
@@ -53,18 +54,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // ── Update status to PENDING before retrying ──────────────────────
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { sync_status: 'PENDING' },
-    });
-
-    // ── Rebuild payload from stored data ──────────────────────────────
-    const items = JSON.parse(order.items_json) as Array<{
-      xmlId: string;
-      quantity: number;
-      initialPrice: number;
+    let items = JSON.parse(order.items_json) as Array<{
+      xmlId: string; quantity: number; initialPrice: number; deliveryFee?: number;
+      rawPayload?: Record<string, unknown>; selectionError?: string;
     }>;
+    if (items[0]?.selectionError) {
+      const page = await prisma.landingPage.findFirst({ where: { product: { slug: order.landing_slug || '' } },
+        include: { product: { include: { variants: { where: { active: true } } } } } });
+      if (!page) return NextResponse.json({ error: 'Landing page không còn tồn tại' }, { status: 400 });
+      const body = items[0].rawPayload || {};
+      try {
+        const resolved = resolveLandingItems((await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
+          body.products || body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo,
+          body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc, page.product);
+        items = resolved.items;
+        await prisma.order.update({ where: { id: orderId }, data: { items_json: JSON.stringify(items), total_price: resolved.totalPrice } });
+      } catch (error) {
+        if (error instanceof SelectionError) return NextResponse.json({ error: error.message, requiresReview: true }, { status: 422 });
+        throw error;
+      }
+    }
+    if (!items.length || items.some(item => !item.xmlId || item.xmlId === 'PENDING_XML_ID')) {
+      return NextResponse.json({ error: 'Chưa có XML ID hợp lệ cho tất cả dòng hàng' }, { status: 422 });
+    }
+    await prisma.order.update({ where: { id: orderId }, data: { sync_status: 'PENDING' } });
 
     const nameParts = order.customer_name.split(' ');
     const payload: RetailCrmOrderPayload = {
@@ -73,6 +86,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       lastName: nameParts.slice(1).join(' ') || undefined,
       phone: order.customer_phone,
       delivery: {
+        cost: items.reduce((sum, item) => sum + (Number(item.deliveryFee) || 0), 0),
         address: {
           countryIso: 'UZ',
           text: order.delivery_address,

@@ -1,3 +1,4 @@
+import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // ── Match variant ────────────────────────────────────────────────
-    const variants = product.variants.map(v => ({
+    const variants = (await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
       id: v.id,
       label: v.label,
       quantity: v.quantity,

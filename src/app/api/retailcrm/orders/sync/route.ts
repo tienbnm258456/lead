@@ -25,7 +25,7 @@ import { requireAuth } from '@/lib/require-auth';
  *     }
  *   },
  *   "items": [
- *     { "xmlId": "abc-123", "quantity": 1, "initialPrice": 250 }
+ *     { "xmlId": "abc-123", "quantity": 1, "initialPrice": 250000 }
  *   ]
  * }
  *
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const totalPrice = body.items.reduce(
       (sum: number, item: { initialPrice: number; quantity: number }) =>
         sum + item.initialPrice * item.quantity,
-      0,
+      Number(body.delivery.cost) || 0,
     );
 
     // ── Step 1: Create order in DB with PENDING status + temp externalId
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         customer_name: body.firstName + (body.lastName ? ` ${body.lastName}` : ''),
         customer_phone: body.phone,
         delivery_address: body.delivery.address.text,
-        items_json: JSON.stringify(body.items),
+        items_json: JSON.stringify(body.items.map((item: Record<string, unknown>, index: number) => ({ ...item, deliveryFee: index === 0 ? Number(body.delivery.cost) || 0 : 0 }))),
         total_price: totalPrice,
         sync_status: 'PENDING',
       },
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone,
       lastName: body.lastName,
       delivery: {
+        cost: Number(body.delivery.cost) || 0,
         address: {
           countryIso: body.delivery.address.countryIso || 'UZ',
           city: body.delivery.address.city || '',

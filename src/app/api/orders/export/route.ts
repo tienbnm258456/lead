@@ -89,9 +89,9 @@ export async function GET(request: NextRequest) {
     const parseItems = (json: string) => {
       try {
         const items = JSON.parse(json);
-        if (Array.isArray(items) && items.length > 0) return items[0];
+        if (Array.isArray(items) && items.length > 0) return items;
       } catch { /* ignore */ }
-      return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
+      return [{ productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 }];
     };
 
     // ── Columns: Format RetailCRM (13 cột A-M) ──
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     };
 
     const addOrderRow = (ws: ExcelJS.Worksheet, order: typeof orders[0], index: number) => {
-      const item = parseItems(order.items_json);
+      return parseItems(order.items_json).map((item: { productName?: string; variantLabel?: string; quantity?: number; initialPrice?: number; deliveryFee?: number }, itemIndex: number) => {
       const deliveryFee = Number(item.deliveryFee) || 0;
       const productPrice = Number(item.initialPrice) || 0;
 
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
         quantity: item.quantity || 1,
         salePrice: productPrice,
         deliveryFee: deliveryFee,
-        totalPrice: Number(order.total_price),
+        totalPrice: itemIndex === 0 ? Number(order.total_price) : 0,
         deliveryAddr: order.delivery_address,
         paymentStatus: 'Chưa thanh toán',
         comment: commentParts.join(', '),
@@ -192,6 +192,7 @@ export async function GET(request: NextRequest) {
       }
 
       return row;
+      });
     };
 
     const formatSheet = (ws: ExcelJS.Worksheet) => {
