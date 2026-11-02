@@ -229,11 +229,44 @@ export default function LandingPagesPage() {
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
 
-  const copyToClipboard = (text: string, id: number) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, id: number) => {
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch {
+      // Try the fallback when browser permissions block Clipboard API.
+    }
+
+    if (!copied) {
+      const previousFocus = document.activeElement;
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.readOnly = true;
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      try {
+        field.focus();
+        field.select();
+        copied = document.execCommand('copy');
+      } catch {
+        copied = false;
+      } finally {
+        field.remove();
+        if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      }
+    }
+
+    if (!copied) {
+      toast.error('Không thể copy tự động. Hãy chọn nội dung và copy thủ công.');
+      return;
+    }
     setCopiedId(id);
     toast.success('Đã copy!');
-    setTimeout(() => setCopiedId(null), 2000);
+    setTimeout(() => setCopiedId(current => current === id ? null : current), 2000);
   };
 
   const getWebhookUrl = (apiKey: string) => {
@@ -372,7 +405,7 @@ export default function LandingPagesPage() {
                   <Key className="h-3 w-3" /> API Key
                 </label>
                 <div className="flex items-center gap-1.5">
-                  <code className="flex-1 truncate rounded-lg border px-2.5 py-1.5 text-xs font-mono"
+                  <code className="min-w-0 flex-1 whitespace-pre-wrap break-all select-all rounded-lg border px-2.5 py-1.5 text-xs font-mono"
                     style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{page.api_key}</code>
                   <button onClick={() => copyToClipboard(page.api_key, page.id)}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors"
@@ -394,12 +427,18 @@ export default function LandingPagesPage() {
                 <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
                   <ExternalLink className="h-3 w-3" /> Webhook URL
                 </label>
-                <button onClick={() => copyToClipboard(getWebhookUrl(page.api_key), page.id + 10000)}
-                  className="w-full text-left rounded-lg border px-2.5 py-1.5 text-[11px] font-mono truncate transition-colors"
-                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }} title="Click để copy">
-                  {getWebhookUrl(page.api_key)}
-                </button>
+                <div className="flex items-start gap-1.5">
+                  <code className="min-w-0 flex-1 whitespace-pre-wrap break-all select-all rounded-lg border px-2.5 py-1.5 text-[11px] font-mono"
+                    style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
+                    {getWebhookUrl(page.api_key)}
+                  </code>
+                  <button onClick={() => copyToClipboard(getWebhookUrl(page.api_key), page.id + 10000)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors"
+                    style={{ borderColor: 'var(--border)', color: copiedId === page.id + 10000 ? '#10b981' : 'var(--muted-foreground)' }}
+                    title="Copy Webhook URL" aria-label="Copy Webhook URL">
+                    {copiedId === page.id + 10000 ? <CheckCircle className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <p className="mt-2.5 text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
