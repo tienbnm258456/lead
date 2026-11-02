@@ -89,11 +89,11 @@ export async function exportOrdersToGoogleSheets(
 
     const parseItems = (json: string | undefined) => {
       try {
-        if (!json) return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
+        if (!json) return [{ productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 }];
         const items = JSON.parse(json);
-        if (Array.isArray(items) && items.length > 0) return items[0];
+        if (Array.isArray(items) && items.length > 0) return items;
       } catch { /* ignore */ }
-      return { productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 };
+      return [{ productName: '', quantity: 1, initialPrice: 0, deliveryFee: 0 }];
     };
 
     const headers = [
@@ -108,8 +108,7 @@ export async function exportOrdersToGoogleSheets(
     // statusColIndex (0-based) = 7 → cột H (Trạng thái đơn hàng) — shifted do thêm 'Loại đơn hàng'
     const statusColIndex = 7;
 
-    const rows = orders.map((order, idx) => {
-      const item = parseItems(order.items_json);
+    const rows = orders.map((order) => parseItems(order.items_json).map((item: { productName?: string; variantLabel?: string; quantity?: number; initialPrice?: number; deliveryFee?: number }, itemIndex: number) => {
       const deliveryFee = Number(item.deliveryFee) || 0;
       const productPrice = Number(item.initialPrice) || 0;
 
@@ -130,12 +129,12 @@ export async function exportOrdersToGoogleSheets(
         item.quantity || 1,                                     // J: Số lượng
         productPrice,                                           // K: Giá sản phẩm
         deliveryFee,                                            // L: Phí vận chuyển
-        Number(order.total_price),                              // M: Tổng tiền
+        (itemIndex === 0 ? Number(order.total_price) : 0),      // M: Tổng tiền
         order.delivery_address,                                 // N: Địa chỉ giao hàng
         'Chưa thanh toán',                                      // O: Trạng thái thanh toán
         commentParts.join(', '),                                // P: Ghi chú
       ];
-    });
+    }));
 
     // Send in batches (5,000 rows per request to stay under Apps Script limits)
     const BATCH_SIZE = 5_000;
@@ -143,7 +142,7 @@ export async function exportOrdersToGoogleSheets(
     let spreadsheetUrl = '';
 
     for (let i = 0; i < totalBatches; i++) {
-      const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+      const batch = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE).flat();
       const isFirstBatch = i === 0;
 
       const payload = {

@@ -8,6 +8,7 @@ import {
   Globe, CheckCircle, XCircle, ExternalLink, RotateCcw, Package, Ruler,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseUZS } from '@/lib/money';
 
 interface Variant {
   id?: number;
@@ -15,7 +16,9 @@ interface Variant {
   quantity: number;
   price: number;
   delivery_fee: number;
+  promotion?: string | null;
   size: string | null;
+  xml_id?: string | null;
 }
 
 interface SizesConfig {
@@ -53,6 +56,7 @@ interface FormVariant {
   quantity: number;
   price: string;
   delivery_fee: string;
+  promotion: string;
 }
 
 async function fetchLandingPages(search: string): Promise<LandingPagesResponse> {
@@ -66,7 +70,7 @@ async function fetchLandingPages(search: string): Promise<LandingPagesResponse> 
 
 const formatUZS = (val: number) => new Intl.NumberFormat('uz-UZ').format(val) + ' UZS';
 
-const emptyVariant = (): FormVariant => ({ label: '', quantity: 1, price: '', delivery_fee: '0' });
+const emptyVariant = (): FormVariant => ({ label: '', quantity: 1, price: '', delivery_fee: '0', promotion: '' });
 
 export default function LandingPagesPage() {
   const queryClient = useQueryClient();
@@ -173,6 +177,7 @@ export default function LandingPagesPage() {
         quantity: v.quantity,
         price: String(v.price),
         delivery_fee: String(v.delivery_fee),
+        promotion: v.promotion || '',
       })),
     );
     setFormHasSizes(page.product.has_sizes);
@@ -204,9 +209,10 @@ export default function LandingPagesPage() {
       id: v.id,
       label: v.label,
       quantity: v.quantity || 1,
-      price: Number(v.price),
-      delivery_fee: Number(v.delivery_fee || 0),
+      price: parseUZS(v.price),
+      delivery_fee: parseUZS(v.delivery_fee || '0'),
       size: null,
+      promotion: v.promotion.trim() || null,
     }));
 
     const payload = {
@@ -224,7 +230,7 @@ export default function LandingPagesPage() {
     }
   };
 
-  const isFormValid = formName.trim() && formVariants.length > 0 && formVariants.every(v => v.label.trim() && Number(v.price) >= 0)
+  const isFormValid = formName.trim() && formVariants.length > 0 && formVariants.every(v => v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
     && (!formHasSizes || formSizes.length > 0);
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
@@ -517,21 +523,26 @@ export default function LandingPagesPage() {
                         style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                         placeholder="Tên gói (VD: 1 dona xarid + 1 sovga – 299.000 UZS)"
                         value={v.label} onChange={e => updateVariant(idx, 'label', e.target.value)} />
+                      <label className="block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Thông tin khuyến mại
+                        <input aria-label="Thông tin khuyến mại" maxLength={100} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                          placeholder="Ví dụ: 1+1 hoặc 2+2" value={v.promotion} onChange={e => updateVariant(idx, 'promotion', e.target.value)} />
+                      </label>
+                      <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Mỗi gói chọn là 1 combo. Tất cả size khách chọn được ghi chung cho từng gói để sale gọi xác nhận. Giá/ship nhập UZS đầy đủ (299.000 → CRM 299).</p>
                       <div className="grid grid-cols-3 gap-2">
                         <div>
                           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Giá (UZS)</label>
-                          <input type="number" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                          <input type="text" inputMode="numeric" pattern="[0-9., ]*" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                            placeholder="299" value={v.price} onChange={e => updateVariant(idx, 'price', e.target.value)} />
+                            placeholder="299.000" value={v.price} onChange={e => updateVariant(idx, 'price', e.target.value)} />
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Phí ship (UZS)</label>
-                          <input type="number" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                          <input type="text" inputMode="numeric" pattern="[0-9., ]*" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                            placeholder="50" value={v.delivery_fee} onChange={e => updateVariant(idx, 'delivery_fee', e.target.value)} />
+                            placeholder="50.000" value={v.delivery_fee} onChange={e => updateVariant(idx, 'delivery_fee', e.target.value)} />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Số lượng</label>
+                          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Số sản phẩm trong combo</label>
                           <input type="number" min="1" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             placeholder="1" value={v.quantity} onChange={e => updateVariant(idx, 'quantity', parseInt(e.target.value) || 1)} />

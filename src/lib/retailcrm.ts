@@ -23,8 +23,11 @@ export type RetailCrmSyncStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT';
 
 export interface RetailCrmOrderItem {
   xmlId: string;
+  promotion?: string;
+  size?: string;
+  variantLabel?: string;
   quantity: number;
-  /** Unit price in thousands of UZS (e.g. 250 = 250,000 UZS) */
+  /** Unit price in full UZS (e.g. 250000); converted to thousands only in buildOrderPayload */
   initialPrice: number;
 }
 
@@ -71,6 +74,15 @@ export interface RetailCrmSyncResult {
 /**
  * Build the order JSON payload matching RetailCRM v5 format
  */
+export function formatOfferXmlId(item: RetailCrmOrderItem): string {
+  const base = item.xmlId.replace(/^(XML\d+)_OFFER$/, '$1');
+  const size = item.size?.split(/\s+\+\s+/).map(value => {
+    const label = value.trim();
+    return label.match(/^(XXXS|XXS|XS|XXXL|XXL|XL|S|M|L|[2-6]XL)(?=\s|$|[:–-])/i)?.[0].toUpperCase() || label;
+  }).filter(Boolean).join(' + ');
+  return [base, item.promotion?.trim(), size].filter(Boolean).join(', ');
+}
+
 export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, unknown> {
   return {
     externalId: data.externalId,
@@ -79,7 +91,7 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
     ...(data.lastName && { lastName: data.lastName }),
     delivery: {
       // Phí vận chuyển tách riêng (không cộng vào initialPrice)
-      ...(data.delivery.cost !== undefined && { cost: data.delivery.cost }),
+      ...(data.delivery.cost !== undefined && { cost: data.delivery.cost / 1000 }),
       address: {
         countryIso: data.delivery.address.countryIso || 'UZ',
         city: data.delivery.address.city || '',
@@ -87,9 +99,9 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
       },
     },
     items: data.items.map((item) => ({
-      offer: { xmlId: item.xmlId },
+      offer: { xmlId: formatOfferXmlId(item) },
       quantity: item.quantity,
-      initialPrice: item.initialPrice, // Chỉ giá sản phẩm, KHÔNG có phí ship
+      initialPrice: item.initialPrice / 1000, // Chỉ giá sản phẩm, KHÔNG có phí ship
     })),
   };
 }

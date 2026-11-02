@@ -82,6 +82,7 @@ model ProductVariant {
   product_id Int     /// FK → Product
   product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
 
+  promotion    String? @db.VarChar(100)            /// Thông tin khuyến mại, ví dụ 1+1, 2+2
   label        String  @db.VarChar(500)            /// Text hiển thị trên LadiPage (dùng để fuzzy match)
   quantity     Int     @default(1)                  /// Số lượng sản phẩm trong gói
   price        Decimal @db.Decimal(12, 2)           /// Giá bán (UZS) — VD: 299000

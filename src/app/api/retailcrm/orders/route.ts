@@ -25,7 +25,7 @@ import { requireAuth } from '@/lib/require-auth';
  *     }
  *   },
  *   "items": [
- *     { "xmlId": "abc-123", "quantity": 1, "initialPrice": 250 }
+ *     { "xmlId": "abc-123", "quantity": 1, "initialPrice": 250000 }
  *   ]
  * }
  *
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone,
       lastName: body.lastName,
       delivery: {
+        cost: Number(body.delivery.cost) || 0,
         address: {
           countryIso: body.delivery.address.countryIso || 'UZ',
           city: body.delivery.address.city || '',
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
     // ── Call RetailCRM ────────────────────────────────────────────────
     const syncResult: RetailCrmSyncResult = await createRetailCrmOrder(payload);
 
-    const httpStatus = syncResult.status === 'SUCCESS' ? 200 : 
+    const httpStatus = syncResult.status === 'SUCCESS' ? 200 :
                        syncResult.status === 'TIMEOUT' ? 504 : 502;
 
     return NextResponse.json(

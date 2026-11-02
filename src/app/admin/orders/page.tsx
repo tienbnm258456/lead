@@ -6,11 +6,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Filter, X, ChevronLeft, ChevronRight,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw,
-  ShoppingCart, Package, Globe, Plus, Edit2, Trash2, Download, FileSpreadsheet,
+  ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
 
-interface Order {
+interface Order extends OrderDetailData {
   id: number;
   external_id: string;
   customer_name: string;
@@ -124,6 +125,7 @@ export default function OrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
@@ -673,7 +675,7 @@ export default function OrdersPage() {
                     {/* External ID — text link */}
                     <td className="px-4 py-3.5">
                       <button
-                        onClick={() => openEditForm(order)}
+                        onClick={() => setDetailOrder(order)}
                         className="font-mono text-sm font-semibold whitespace-nowrap transition-colors hover:underline cursor-pointer text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                       >
                         {order.external_id}
@@ -759,6 +761,12 @@ export default function OrdersPage() {
                     {/* Actions */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" onClick={() => setDetailOrder(order)}
+                          className="flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-medium whitespace-nowrap"
+                          style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                          aria-label={'Xem chi tiết đơn ' + order.external_id} title="Xem chi tiết đơn hàng">
+                          <Eye className="h-4 w-4" />
+                        </button>
                         <button onClick={() => openEditForm(order)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                           style={{ color: 'var(--muted-foreground)' }}
@@ -836,6 +844,12 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      {detailOrder && <OrderDetailsDialog
+        order={orders.find(order => order.id === detailOrder.id) || detailOrder}
+        landingPageName={detailOrder.landing_slug ? landingPageMap.get(detailOrder.landing_slug)?.name : undefined}
+        onClose={() => setDetailOrder(null)}
+      />}
 
       {/* ── Create/Edit Modal ── */}
       {showForm && createPortal(

@@ -1,3 +1,4 @@
+import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
@@ -96,6 +97,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    if (body.variants !== undefined && (!Array.isArray(body.variants) || body.variants.length === 0 || body.variants.some((v: Record<string, unknown>) =>
+      typeof v.label !== 'string' || !v.label.trim() ||
+      typeof v.price !== 'number' || !Number.isFinite(v.price) || v.price < 0 ||
+      (v.delivery_fee !== undefined && (typeof v.delivery_fee !== 'number' || !Number.isFinite(v.delivery_fee) || v.delivery_fee < 0)) ||
+      (v.promotion != null && (typeof v.promotion !== 'string' || v.promotion.trim().length > 100)) || (v.xml_id != null && typeof v.xml_id !== 'string') || (v.size != null && typeof v.size !== 'string')
+    ))) return NextResponse.json({ error: 'Gói sản phẩm phải có tên và giá/ship UZS hợp lệ' }, { status: 400 });
 
     const errors: string[] = [];
     if (!body.name?.trim()) errors.push('Tên trang là bắt buộc');
@@ -144,11 +151,15 @@ export async function POST(request: NextRequest) {
             quantity: v.quantity || 1,
             price: Number(v.price),
             delivery_fee: Number(v.delivery_fee || 0),
-            size: v.size || null,
+            size: null,
+                promotion: v.promotion?.trim() || null,
+                xml_id: v.xml_id?.trim() || null,
             active: true,
           },
         });
       }
+
+      await ensureOfferXmlIds(tx, await tx.productVariant.findMany({ where: { product_id: product.id, active: true } }));
 
       // 3. Create LandingPage
       const lp = await tx.landingPage.create({
