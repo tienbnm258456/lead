@@ -146,3 +146,35 @@ test('requested XML format strips auto suffix, abbreviates descriptive sizes and
   assert.equal(output.delivery.cost, 65);
   assert.deepEqual(output.items.map(i => i.initialPrice), [390, 610]);
 });
+
+test('manual order uses configured offer/promotion/size and splits shipping, ignoring client prices', async () => {
+  let saved; let sent;
+  const variant = { ...variants[1], id: 2, xml_id: 'XML0002_OFFER', promotion: '2+2', price: 610000, delivery_fee: 65000 };
+  const prisma = {
+    landingPage: { findUnique: async ({ where, include }) => where.id === 7 && include.product.include.variants.where.id === 2 ?
+      { product: { ...product, active: true, slug: 'test', variants: [variant] } } : null },
+    order: { create: async ({ data }) => { saved = data; return { id: 11, ...data }; }, update: async () => ({}) },
+    orderSyncLog: { create: async () => ({}) }, $transaction: async () => [],
+  };
+  const route = load('src/app/api/orders/route.ts', {
+    '@/lib/ladipage-order': helpers, '@/lib/prisma': { prisma },
+    'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
+    '@/lib/retailcrm': { createRetailCrmOrder: async payload => { sent = crm.buildOrderPayload(payload); return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 99 } }; } },
+    '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({}) },
+  });
+  const body = { customer_name: 'Test User', customer_phone: '0987654573', delivery_address: 'Test', landing_page_id: 7, variant_id: 2,
+    selected_size: 'S o‘lcham: 55 kg dan kam', total_price: 1, selected_package: 'wrong', landing_slug: 'wrong' };
+  const result = await route.POST({ json: async () => body });
+  assert.equal(result.status, 201);
+  assert.equal(result.body.data.external_id, 'MAN-00011');
+  assert.equal(sent.items[0].offer.xmlId, 'XML0002, 2+2, S');
+  assert.equal(sent.items[0].initialPrice, 610);
+  assert.equal(sent.items[0].quantity, 1);
+  assert.equal(sent.delivery.cost, 65);
+  assert.equal(saved.total_price, 675000);
+  assert.equal(saved.landing_slug, 'test');
+  assert.equal(JSON.parse(saved.items_json)[0].deliveryFee, 65000);
+  sent = undefined;
+  const invalid = await route.POST({ json: async () => ({ ...body, variant_id: 123 }) });
+  assert.equal(invalid.status, 400); assert.equal(sent, undefined);
+});

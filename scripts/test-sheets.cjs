@@ -26,34 +26,37 @@ function mockGoogle() {
       data.forEach((row, i) => row.forEach((v, j) => { const r = this.r + i - 1; this.sheet.rows[r] ||= []; this.sheet.rows[r][this.c + j - 1] = v; })); return this;
     }
     getValues() { return Array.from({ length: this.h }, (_, i) => Array.from({ length: this.w }, (_, j) => this.sheet.rows[this.r + i - 1]?.[this.c + j - 1] ?? '')); }
+    setFontSize() { return this; } setHorizontalAlignment() { return this; } setBorder() { return this; }
+    setBackgrounds(values) { this.sheet.styles.push({ r: this.r, c: this.c, backgrounds: values }); return this; }
+    setFontColors(values) { this.sheet.styles.push({ r: this.r, c: this.c, colors: values }); return this; }
     setFontWeight() { return this; } setBackground() { return this; } setFontColor() { return this; }
     setNumberFormat() { return this; } setVerticalAlignment() { return this; } setWrapStrategy() { return this; }
   }
   class Sheet {
-    constructor(name, id) { this.name = name; this.id = id; this.rows = []; this.maxRows = 1000; }
+    constructor(name, id) { this.name = name; this.id = id; this.rows = []; this.maxRows = 1000; this.styles = []; }
     getRange(...args) { return new Range(this, ...args); }
     getName() { return this.name; } getSheetId() { return this.id; } getLastRow() { return this.rows.length; }
     getMaxRows() { return this.maxRows; } insertRowsAfter(_, n) { this.maxRows += n; }
-    setFrozenRows() {} setColumnWidth() {} hideColumns() {}
+    setRowHeight() {} setFrozenRows() {} setColumnWidth() {} hideColumns() {}
   }
   const context = {
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) || null, setProperty: (k, v) => props.set(k, v) }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) || null, setProperty: (k, v) => props.set(k, v), getProperties: () => Object.fromEntries(props) }) },
     DriveApp: { getFolderById: id => { if (id !== 'folder') throw Error('bad folder'); return { getName: () => 'Archive' }; }, getFileById: () => ({ moveTo() {} }) },
     SpreadsheetApp: {
       create(name) { const id = 'file-' + (files.size + 1); const sheets = new Map();
         const file = { id, name, sheets, getId: () => id, getUrl: () => 'https://example.test/' + id,
-          getSheetByName: name => sheets.get(name), insertSheet(name) { const sheet = new Sheet(name, sheets.size + 1); sheets.set(name, sheet); return sheet; } };
+          getSheets: () => [...sheets.values()], getSheetByName: name => sheets.get(name), insertSheet(name) { const sheet = new Sheet(name, sheets.size + 1); sheets.set(name, sheet); return sheet; } };
         files.set(id, file); return file; },
       openById(id) { if (!files.has(id)) throw Error('missing archive'); return files.get(id); },
-      getActiveSpreadsheet: () => null, flush() {}, WrapStrategy: { WRAP: 'WRAP' },
+      getActiveSpreadsheet: () => null, flush() {}, WrapStrategy: { WRAP: 'WRAP' }, BorderStyle: { SOLID: 'SOLID' },
     },
     Utilities: { DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (_, value) => Array.from(crypto.createHash('sha256').update(value).digest()) },
-    LockService: { getScriptLock: () => ({ tryLock: () => { locks++; return true; }, hasLock: () => true, releaseLock: () => { locks--; } }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => { locks++; return true; }, waitLock: () => { locks++; }, hasLock: () => true, releaseLock: () => { locks--; } }) },
     ContentService: { createTextOutput: text => ({ text, setMimeType() { return this; } }), MimeType: { JSON: 'json' } }, Logger: { log() {} },
   };
   vm.createContext(context); vm.runInContext(fs.readFileSync('src/lib/google-apps-script.js', 'utf8'), context);
   const send = payload => JSON.parse(context.doPost({ postData: { contents: JSON.stringify(payload) } }).text);
-  return { files, props, send, locks: () => locks };
+  return { files, props, send, context, locks: () => locks };
 }
 const settings = () => { process.env.GOOGLE_APPS_SCRIPT_URL = 'https://example.test/exec'; process.env.GOOGLE_APPS_SCRIPT_SECRET = 'test-secret'; };
 test('year/month follows Bangkok order date, not execution time or UTC year', () => {
@@ -127,4 +130,19 @@ test('empty export does not create files and schema mismatch cannot acknowledge 
   let ack = false;
   const result = await exporter.exportOrdersToGoogleSheets([order(2)], undefined, async () => { ack = true; });
   assert.equal(result.success, false); assert.equal(ack, false);
+});
+
+test('status colors apply to new rows and repair existing archives without changing values', async () => {
+  settings(); const google = mockGoogle();
+  const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
+  const input = ['SUCCESS', 'FAILED', 'PENDING', 'TIMEOUT'].map((status, i) => ({ ...order(i + 1), sync_status: status }));
+  assert.equal((await exporter.exportOrdersToGoogleSheets(input)).success, true);
+  const sheet = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
+  const statusColors = sheet.styles.find(style => style.c === 8 && style.colors);
+  assert.deepEqual(Array.from(statusColors.colors, row => row[0]).filter((_, i) => i % 2 === 0), ['#188038', '#C5221F', '#E37400', '#9334E6']);
+  const before = JSON.stringify(sheet.rows);
+  sheet.styles = []; google.context.reformatAllYearFiles();
+  assert.equal(JSON.stringify(sheet.rows), before);
+  assert.ok(sheet.styles.some(style => style.c === 8 && style.colors));
+  assert.equal(google.locks(), 0);
 });

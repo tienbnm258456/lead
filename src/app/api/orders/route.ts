@@ -1,3 +1,4 @@
+import { ensureOfferXmlIds, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
@@ -140,11 +141,32 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { customer_name, customer_phone, delivery_address, total_price, selected_package, selected_size, landing_slug } = body;
+    const customer_name = scalar(body.customer_name);
+    const customer_phone = scalar(body.customer_phone);
+    const delivery_address = scalar(body.delivery_address);
 
     if (!customer_name || !customer_phone || !delivery_address) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
+
+    const landingPageId = Number(body.landing_page_id);
+    const variantId = Number(body.variant_id);
+    if (!Number.isInteger(landingPageId) || landingPageId <= 0 || !Number.isInteger(variantId) || variantId <= 0) {
+      return NextResponse.json({ error: 'Vui lòng chọn Landing Page và gói sản phẩm' }, { status: 400 });
+    }
+    const page = await prisma.landingPage.findUnique({
+      where: { id: landingPageId, active: true },
+      include: { product: { include: { variants: { where: { id: variantId, active: true } } } } },
+    });
+    if (!page || !page.product.active || page.product.variants.length !== 1) {
+      return NextResponse.json({ error: 'Gói sản phẩm không thuộc Landing Page hoặc đã ngừng hoạt động' }, { status: 400 });
+    }
+    const configured = await ensureOfferXmlIds(prisma, page.product.variants);
+    const resolved = resolveLandingItems(configured.map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
+      configured[0].label, body.selected_size, page.product);
+    const selected_package = configured[0].label;
+    const selected_size = resolved.items[0].size || null;
+    const landing_slug = page.product.slug;
 
     // M6 Fix: Dùng TEMP ID trước, update sau khi có DB auto-increment ID (chống race condition)
     const tempExternalId = `MAN-TEMP-${Date.now()}`;
@@ -155,8 +177,8 @@ export async function POST(request: Request) {
         customer_name,
         customer_phone,
         delivery_address,
-        items_json: JSON.stringify([{ productName: selected_package || 'Manual', quantity: 1, initialPrice: Number(total_price) || 0 }]),
-        total_price: Number(total_price) || 0,
+        items_json: JSON.stringify(resolved.items),
+        total_price: resolved.totalPrice,
         source: 'admin',
         landing_slug: landing_slug || null,
         selected_package: selected_package || null,
@@ -166,7 +188,6 @@ export async function POST(request: Request) {
     });
 
     // M6 Fix: Update external_id với DB auto-increment ID (an toàn race condition)
-    const prefix = process.env.ORDER_PREFIX || 'ORD-';
     const externalId = `MAN-${String(order.id).padStart(5, '0')}`;
     await prisma.order.update({
       where: { id: order.id },
@@ -181,16 +202,13 @@ export async function POST(request: Request) {
       firstName: customer_name,
       phone: customer_phone,
       delivery: {
+        cost: resolved.deliveryFee,
         address: {
           countryIso: 'UZ',
           text: delivery_address,
         },
       },
-      items: [{
-        xmlId: externalId, // Use externalId as xmlId for manual orders
-        quantity: 1,
-        initialPrice: Number(total_price) || 0,
-      }],
+      items: resolved.items,
     };
 
     const syncResult = await createRetailCrmOrder(crmPayload);
@@ -226,13 +244,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data: { ...order, sync_status: dbSyncStatus },
+      data: { ...order, external_id: externalId, sync_status: dbSyncStatus },
       syncStatus: dbSyncStatus,
       syncMessage: syncResult.status === 'SUCCESS'
         ? `Đồng bộ CRM thành công (ID: ${syncResult.response?.id})`
         : `Đồng bộ CRM thất bại: ${syncResult.errorMessage}`,
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof SelectionError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error creating order:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

@@ -124,6 +124,7 @@ function handleExport(payload, cfg) {
     range.setValues(safe);
     range.setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   }
+  formatExportSheet(sheet, last + 1, pending.length);
   SpreadsheetApp.flush();
   return { success: true, protocolVersion: 2, year: payload.year, month: payload.month,
     productKey: payload.productKey, sheetName: sheet.getName(), acceptedRows: payload.data.length,
@@ -132,3 +133,56 @@ function handleExport(payload, cfg) {
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script entry point
 function doGet() { return jsonResponse({ status: 'ok', protocolVersion: 2, message: 'Lead Admin annual export' }); }
+
+/** Bulk formatting: status is column H in the current 16-column layout. */
+function statusStyle(value) {
+  var key = String(value || '').trim().toUpperCase();
+  if (key === 'SUCCESS' || key === 'THÀNH CÔNG') return { background: '#E6F4EA', color: '#188038' };
+  if (key === 'FAILED' || key === 'LỖI' || key === 'THẤT BẠI') return { background: '#FCE8E6', color: '#C5221F' };
+  if (key === 'PENDING' || key === 'CHỜ ĐỒNG BỘ' || key === 'CHỜ XỬ LÝ') return { background: '#FEF7E0', color: '#E37400' };
+  if (key === 'TIMEOUT' || key === 'HẾT THỜI GIAN' || key === 'HẾT THỜI GIAN CHỜ') return { background: '#F3E8FD', color: '#9334E6' };
+  return { background: '#FFFFFF', color: '#202124' };
+}
+function formatExportSheet(sheet, startRow, count) {
+  sheet.getRange(1, 1, 1, 16).setFontWeight('bold').setFontSize(10)
+    .setBackground('#334488').setFontColor('#FFFFFF').setHorizontalAlignment('center')
+    .setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+  sheet.setFrozenRows(1);
+  sheet.setRowHeight(1, 56);
+  var widths = [180, 155, 180, 125, 170, 170, 180, 160, 360, 110, 150, 150, 170, 320, 170, 420];
+  widths.forEach(function(width, index) { sheet.setColumnWidth(index + 1, width); });
+  sheet.hideColumns(17);
+  if (!count) return;
+  var range = sheet.getRange(startRow, 1, count, 16);
+  range.setFontSize(10).setFontWeight('normal').setFontColor('#202124')
+    .setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
+    .setBackgrounds(Array.from({ length: count }, function(_, i) {
+      return Array(16).fill((startRow + i) % 2 === 0 ? '#F8F9FA' : '#FFFFFF');
+    })).setBorder(true, true, true, true, true, true, '#DADCE0', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(startRow, 10, count, 4).setNumberFormat('#,##0.##').setHorizontalAlignment('right');
+  var status = sheet.getRange(startRow, 8, count, 1);
+  var styles = status.getValues().map(function(row) { return statusStyle(row[0]); });
+  status.setBackgrounds(styles.map(function(style) { return [style.background]; }))
+    .setFontColors(styles.map(function(style) { return [style.color]; })).setFontWeight('bold');
+}
+/** Run manually once after updating code: format existing registered yearly archives, without re-export. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script editor entry point
+function reformatAllYearFiles() {
+  var cfg = settings();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var props = cfg.props.getProperties();
+    Object.keys(props).filter(function(key) { return /^YEAR_SPREADSHEET_\d{4}$/.test(key); }).forEach(function(key) {
+      var ss = SpreadsheetApp.openById(props[key]);
+      ss.getSheets().forEach(function(sheet) {
+        if (!sheet.getLastRow()) return;
+        var header = sheet.getRange(1, 1, 1, 17).getValues()[0];
+        if (header[0] !== 'Tên (bắt buộc)' || header[7] !== 'Trạng thái đơn hàng' || header[16] !== EXPORT_KEY_HEADER) return;
+        formatExportSheet(sheet, 2, sheet.getLastRow() - 1);
+        Logger.log('Formatted: ' + sheet.getName());
+      });
+    });
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+}

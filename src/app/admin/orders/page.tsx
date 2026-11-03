@@ -291,7 +291,7 @@ export default function OrdersPage() {
     if (editOrder) {
       updateMutation.mutate({ id: editOrder.id, payload: formData });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId });
     }
   };
 
@@ -335,7 +335,7 @@ export default function OrdersPage() {
     bulkDeleteMutation.mutate(Array.from(selectedIds));
   };
 
-  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim();
+  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!hasSizes || formData.selected_size)));
 
   const handleSort = useCallback((col: string) => {
     setFilters(p => ({

@@ -112,7 +112,7 @@ CRON_SECRET=CHUOI_BI_MAT_RIENG_CHO_API_CRON
 
 GOOGLE_SHEETS_SOURCE phải cố định, khác giữa các app/database nếu dùng chung thư mục. Đổi source sau khi đã xuất có thể làm dữ liệu cũ được ghi lại thành dòng mới.
 
-Restart server sau khi sửa env. Background job không tự chạy trong npm run dev. Không cần đổi URL, secret hay code khi đổi năm.
+Restart server sau khi sửa env. Trong npm run dev, đặt SHEETS_EXPORT_INTERVAL_MINUTES=5 để bật job Sheets: lần đầu sau khoảng 15 giây, sau đó mỗi 5 phút; nếu không đặt interval hợp lệ thì dev không chạy lịch ngày. CLEANUP_INTERVAL_MINUTES chỉ bật job cleanup riêng khi được cấu hình. Không cần đổi URL, secret hay code khi đổi năm.
 
 ### Production / PM2
 
@@ -195,3 +195,7 @@ Nếu test xong cần xóa file mẫu, dùng project/thư mục test riêng; kh�
 - Web App deployment: https://developers.google.com/apps-script/guides/web
 - Script Properties: https://developers.google.com/apps-script/reference/properties/properties-service
 - Drive moveTo: https://developers.google.com/apps-script/reference/drive/file#movetodestination
+
+## Khôi phục format cho file đã xuất
+
+Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong editor và bấm Run một lần. Hàm áp dụng format cho các tab archive đã đăng ký: header xanh/căn giữa/xuống dòng, độ rộng 16 cột, kẻ bảng/nền xen kẽ, trạng thái cột H màu xanh (thành công), đỏ (lỗi), cam (chờ), tím (timeout). Không sửa giá trị, không xuất lại và không thêm dòng. Sau đó Deploy → Manage deployments → Edit → New version → Deploy để các lần xuất tiếp theo tự có format.

@@ -53,7 +53,8 @@ export async function GET(request: Request) {
     }
 
     // ── Check 2: Có phải tháng xuất không? ──
-    const isTestMode = !!process.env.SHEETS_EXPORT_INTERVAL_MINUTES;
+    const intervalMinutes = Number(process.env.SHEETS_EXPORT_INTERVAL_MINUTES);
+    const isTestMode = Number.isFinite(intervalMinutes) && intervalMinutes > 0 && intervalMinutes * 60000 <= 2147483647;
     const now = new Date();
     const currentMonth = now.getMonth() + 1; // 1-12
     const exportMonths = getExportMonths();
