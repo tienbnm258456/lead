@@ -9,3 +9,8 @@ export function canManageAccount(actor: Pick<AuthUser, 'id' | 'role' | 'group_id
   if (actor.id === target.id || target.role === 'ADMIN') return false;
   return isTotalAdmin(actor) || (actor.role === 'ADMIN2' && actor.group_id != null && target.role === 'USER' && target.group_id === actor.group_id);
 }
+
+/** A group can receive new assignments only while it has an active manager. */
+export function managedGroupWhere(id: number) {
+  return { id, active: true, users: { some: { role: 'ADMIN2' as const, active: true } } };
+}

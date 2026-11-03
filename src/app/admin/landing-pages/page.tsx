@@ -78,7 +78,7 @@ export default function LandingPagesPage() {
   const queryClient = useQueryClient();
   const [currentRole, setCurrentRole] = useState('');
   const [viewerScope, setViewerScope] = useState<string | null>(null);
-  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: number; name: string; display_name: string; assignable: boolean }[]>([]);
   const [formGroup, setFormGroup] = useState('');
   useEffect(() => {
     fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(user => {
@@ -509,7 +509,7 @@ export default function LandingPagesPage() {
             <div className="flex-1 overflow-y-auto px-7 space-y-6">
               {currentRole === 'ADMIN' && <label className="block text-sm font-semibold">Nhóm sở hữu
                 <select className="mt-2 w-full rounded-lg border p-3" style={{ background: 'var(--card)', color: 'var(--foreground)' }} value={formGroup} onChange={e => setFormGroup(e.target.value)}>
-                  <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+                  <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id} disabled={!group.assignable}>{group.display_name}{!group.assignable ? ' (không có Quản lý hoạt động)' : ''}</option>)}
                 </select>
                 <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>Đổi nhóm sẽ chuyển Landing Page và toàn bộ đơn hàng liên quan sang nhóm mới.</span>
               </label>}

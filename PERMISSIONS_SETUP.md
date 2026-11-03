@@ -89,3 +89,9 @@ node scripts/test-permissions-db.cjs
 ~~~
 
 Các test kiểm tra scope, IDOR qua order/page IDs, nâng quyền, giả group_id, xóa mềm giữ lịch sử, Excel không lộ nhóm khác/không đánh dấu dọn dữ liệu và thu hồi phiên.
+
+## Khóa Quản lý và chuyển thành viên
+
+Nhóm chỉ nhận phân công mới khi có Quản lý đang hoạt động. Khóa Quản lý sẽ làm nhóm hiện trạng vẫn còn tên nhưng không thể chọn để gán Landing Page hoặc thêm/chuyển Người dùng mới vào. Backend cũng kiểm tra, kể cả dropdown đang mở từ trước. Mở khóa Quản lý sẽ cho phép phân công trở lại.
+
+Người dùng hiện tại không bị khóa theo, giữ dữ liệu và quyền nhóm cũ. Quản trị viên vào Tài khoản → Sửa Người dùng → Nhóm làm việc → chọn nhóm có Quản lý hoạt động → Lưu để chuyển người; phiên cũ của người đó bị thu hồi. Chuyển người không tự chuyển Landing Page/đơn. Muốn bàn giao cả dữ liệu, dùng Sửa Landing Page → Nhóm sở hữu riêng; việc chuyển trang sẽ chuyển cả đơn lịch sử liên quan.

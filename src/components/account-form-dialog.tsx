@@ -10,7 +10,7 @@ export interface AccountFormValues {
 interface Props {
   editing: boolean; canCreateManager: boolean; busy: boolean;
   form: AccountFormValues; setForm: Dispatch<SetStateAction<AccountFormValues>>;
-  groups: { id: number; name: string }[];
+  groups: { id: number; name: string; display_name: string; assignable: boolean }[];
   onClose: () => void; onSubmit: (event: FormEvent) => void;
 }
 const fieldClass = 'h-11 w-full rounded-xl border bg-transparent pl-10 pr-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60';
@@ -90,7 +90,7 @@ export function AccountFormDialog({ editing, canCreateManager, busy, form, setFo
             })}
           </div>
           {canCreateManager && form.role === 'USER' ? <label className="mt-5 block"><span className={labelClass}>Nhóm làm việc <span className="text-indigo-500">*</span></span>
-            <div className="relative"><Users aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-indigo-400" /><select className={fieldClass + ' appearance-none pr-8'} style={fieldStyle} required value={form.group_id} onChange={e => setForm(p => ({ ...p, group_id: e.target.value }))}><option value="">Chọn nhóm cho thành viên</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-4 h-3 w-3" /></div>
+            <div className="relative"><Users aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-indigo-400" /><select className={fieldClass + ' appearance-none pr-8'} style={fieldStyle} required value={form.group_id} onChange={e => setForm(p => ({ ...p, group_id: e.target.value }))}><option value="">Chọn nhóm cho thành viên</option>{groups.map(group => <option key={group.id} value={group.id} disabled={!group.assignable}>{group.display_name}{!group.assignable ? ' (không có Quản lý hoạt động)' : ''}</option>)}</select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-4 h-3 w-3" /></div>
           </label> : <div className="mt-4 flex items-start gap-2.5 rounded-xl p-3.5 text-xs leading-relaxed" style={{ background: 'var(--muted)', color: 'var(--muted-foreground)' }}><Users className="mt-0.5 h-4 w-4 shrink-0" /><span>{form.role === 'ADMIN2' ? editing ? 'Quyền truy cập dữ liệu áp dụng theo nhóm của tài khoản quản lý.' : 'Một nhóm riêng sẽ được tạo tự động cho tài khoản quản lý.' : 'Thành viên được thêm vào cùng nhóm với bạn.'}</span></div>}
           {editing && <label className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
             <span><span className="block text-sm font-semibold">Cho phép đăng nhập</span><span className="mt-1 block text-xs" style={{ color: 'var(--muted-foreground)' }}>{form.active ? 'Tài khoản đang hoạt động' : 'Tài khoản đang bị khóa'}</span></span>

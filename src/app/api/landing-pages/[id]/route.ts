@@ -1,4 +1,4 @@
-import { landingScope, isTotalAdmin } from '@/lib/permissions';
+import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -57,8 +57,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     let assignedGroup = existing.group_id;
     if (isTotalAdmin(auth.user) && body.group_id !== undefined) {
       assignedGroup = body.group_id === null ? null : Number(body.group_id);
-      if (assignedGroup !== null && (!Number.isInteger(assignedGroup) || assignedGroup <= 0)) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
-      if (assignedGroup && !await prisma.accessGroup.findFirst({ where: { id: assignedGroup, active: true } })) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
+      if (assignedGroup !== null && (!Number.isInteger(assignedGroup) || assignedGroup <= 0)) return NextResponse.json({ error: 'Nhóm không hợp lệ hoặc Quản lý của nhóm đã bị khóa' }, { status: 400 });
+      if (assignedGroup && !await prisma.accessGroup.findFirst({ where: assignedGroup !== existing.group_id ? managedGroupWhere(assignedGroup) : { id: assignedGroup, active: true } })) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
     }
     const result = await prisma.$transaction(async (tx) => {
       if (assignedGroup !== existing.group_id) {

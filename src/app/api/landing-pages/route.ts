@@ -1,4 +1,4 @@
-import { landingScope, isTotalAdmin } from '@/lib/permissions';
+import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     const groupId = isTotalAdmin(auth.user) ? (body.group_id == null ? null : Number(body.group_id)) : auth.user.group_id;
     if (!isTotalAdmin(auth.user) && !groupId) return NextResponse.json({ error: 'Tài khoản chưa được gán nhóm' }, { status: 403 });
-    if (groupId && !await prisma.accessGroup.findFirst({ where: { id: groupId, active: true } })) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
+    if (groupId && !await prisma.accessGroup.findFirst({ where: isTotalAdmin(auth.user) ? managedGroupWhere(groupId) : { id: groupId, active: true } })) return NextResponse.json({ error: 'Không thể gán nhóm không có Quản lý đang hoạt động' }, { status: 400 });
     const pageName = body.name.trim();
     const slug = generateSlug(pageName) + '-' + Date.now().toString(36);
 

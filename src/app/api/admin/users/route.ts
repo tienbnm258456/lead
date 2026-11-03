@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUserManager } from '@/lib/require-auth';
-import { canManageAccount, dataScope, isTotalAdmin } from '@/lib/permissions';
+import { canManageAccount, dataScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { hashPassword, validatePasswordStrength } from '@/lib/password';
 import type { AdminRole } from '@prisma/client';
 
@@ -10,9 +10,9 @@ export async function GET() {
   const auth = await requireUserManager(); if (auth.error) return auth.error;
   const [users, groups] = await Promise.all([
     prisma.adminUser.findMany({ where: isTotalAdmin(auth.user) ? {} : { role: 'USER', ...dataScope(auth.user) }, select, orderBy: { created_at: 'desc' } }),
-    prisma.accessGroup.findMany({ where: { active: true, ...(isTotalAdmin(auth.user) ? {} : { id: auth.user.group_id ?? -1 }) }, select: { id: true, name: true } }),
+    prisma.accessGroup.findMany({ where: { active: true, ...(isTotalAdmin(auth.user) ? {} : { id: auth.user.group_id ?? -1 }) }, select: { id: true, name: true, users: { where: { role: 'ADMIN2' }, select: { id: true, username: true, active: true }, orderBy: { id: 'asc' } } } }),
   ]);
-  return NextResponse.json({ success: true, data: users, groups });
+  return NextResponse.json({ success: true, data: users, groups: groups.map(group => ({ id: group.id, name: group.name, display_name: group.name + (group.users.length ? ' — ' + group.users.map(manager => '@' + manager.username).join(', ') : ' — #' + group.id), assignable: group.users.some(manager => manager.active) })) });
 }
 export async function POST(request: Request) {
   const auth = await requireUserManager(); if (auth.error) return auth.error;
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     if (passwordError || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return NextResponse.json({ error: passwordError || 'Email không hợp lệ' }, { status: 400 });
     if (!['ADMIN2', 'USER'].includes(role) || (!isTotalAdmin(auth.user) && role !== 'USER')) return NextResponse.json({ error: 'Không được tạo tài khoản ngang hoặc trên cấp' }, { status: 403 });
     const requestedGroup = isTotalAdmin(auth.user) ? Number(body.group_id) : auth.user.group_id;
-    if (role === 'USER' && (!requestedGroup || !await prisma.accessGroup.findFirst({ where: { id: requestedGroup, active: true } }))) return NextResponse.json({ error: 'Cần chọn nhóm hợp lệ cho Người dùng' }, { status: 400 });
+    if (role === 'USER' && (!requestedGroup || !await prisma.accessGroup.findFirst({ where: managedGroupWhere(requestedGroup) }))) return NextResponse.json({ error: 'Cần chọn nhóm hợp lệ cho Người dùng' }, { status: 400 });
     const password_hash = await hashPassword(body.password);
     const user = await prisma.$transaction(async tx => {
       const group_id = role === 'ADMIN2' ? (await tx.accessGroup.create({ data: { name: name + ' - Nhóm' } })).id : requestedGroup;
@@ -54,7 +54,7 @@ export async function PATCH(request: Request) {
       password_hash = await hashPassword(body.password);
     }
     const group_id = isTotalAdmin(auth.user) ? (body.group_id === undefined ? target.group_id : Number(body.group_id)) : auth.user.group_id;
-    if (role === 'USER' && (!group_id || !await prisma.accessGroup.findFirst({ where: { id: group_id, active: true } }))) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
+    if (role === 'USER' && (!group_id || !await prisma.accessGroup.findFirst({ where: { id: group_id, active: true, ...(group_id !== target.group_id || target.role !== 'USER' ? { users: { some: { role: 'ADMIN2', active: true } } } : {}) } }))) return NextResponse.json({ error: 'Nhóm không hợp lệ hoặc Quản lý của nhóm đã bị khóa' }, { status: 400 });
     await prisma.$transaction(async tx => {
       const assigned = role === 'ADMIN2' ? (target.role === 'ADMIN2' && target.group_id ? target.group_id : (await tx.accessGroup.create({ data: { name: name + ' - Nhóm' } })).id) : group_id;
       const result = await tx.adminUser.updateMany({ where: { id: target.id, role: isTotalAdmin(auth.user) ? { not: 'ADMIN' } : 'USER', ...(!isTotalAdmin(auth.user) ? dataScope(auth.user) : {}) },
