@@ -1,3 +1,4 @@
+import { landingScope, isTotalAdmin } from '@/lib/permissions';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '50');
     const search = searchParams.get('search') || '';
 
-    const where = search
+    const searchWhere = search
       ? {
           OR: [
             { name: { contains: search, mode: 'insensitive' as const } },
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
+    const where = { ...searchWhere, ...landingScope(auth.user) };
     const [data, total] = await Promise.all([
       prisma.landingPage.findMany({
         where,
@@ -122,6 +124,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const groupId = isTotalAdmin(auth.user) ? (body.group_id == null ? null : Number(body.group_id)) : auth.user.group_id;
+    if (!isTotalAdmin(auth.user) && !groupId) return NextResponse.json({ error: 'Tài khoản chưa được gán nhóm' }, { status: 403 });
+    if (groupId && !await prisma.accessGroup.findFirst({ where: { id: groupId, active: true } })) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
     const pageName = body.name.trim();
     const slug = generateSlug(pageName) + '-' + Date.now().toString(36);
 
@@ -134,6 +139,7 @@ export async function POST(request: NextRequest) {
       const product = await tx.product.create({
         data: {
           name: pageName,
+          group_id: groupId,
           slug,
           has_sizes: !!body.has_sizes,
           // sizes stored as { label: "Size", options: ["S", "M", "L"] }
@@ -166,6 +172,8 @@ export async function POST(request: NextRequest) {
         data: {
           name: pageName,
           api_key: apiKey,
+          group_id: groupId,
+          created_by_id: auth.user.id,
           product_id: product.id,
           active: true,
         },

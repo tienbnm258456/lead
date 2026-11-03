@@ -4,7 +4,7 @@ import {
   type RetailCrmOrderPayload,
   type RetailCrmSyncResult,
 } from '@/lib/retailcrm';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 /**
  * POST /api/retailcrm/orders
@@ -36,7 +36,7 @@ import { requireAuth } from '@/lib/require-auth';
  * }
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

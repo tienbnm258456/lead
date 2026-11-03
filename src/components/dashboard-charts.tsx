@@ -27,6 +27,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDisplayNumber, formatDashboardDate } from '@/lib/display-format';
 
 // ── Types ──
 interface DashboardChartsProps {
@@ -73,7 +74,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
       <p className="font-semibold mb-1" style={{ color: 'var(--foreground)' }}>{label}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: 'var(--muted-foreground)' }}>
-          {p.name}: <span className="font-bold" style={{ color: 'var(--foreground)' }}>{p.value.toLocaleString('vi-VN')}</span>
+          {p.name}: <span className="font-bold" style={{ color: 'var(--foreground)' }}>{formatDisplayNumber(p.value)}</span>
         </p>
       ))}
     </div>
@@ -87,11 +88,6 @@ export default function DashboardCharts({
   topLandingPages,
   recentOrders,
 }: DashboardChartsProps) {
-  const formatPrice = (price: unknown) => {
-    const num = typeof price === 'string' ? parseFloat(price) : Number(price);
-    return new Intl.NumberFormat('uz-UZ').format(num);
-  };
-
   const successRate = stats.total > 0 ? Math.round((stats.successCount / stats.total) * 100) : 0;
 
   const cards = [
@@ -148,7 +144,7 @@ export default function DashboardCharts({
               <div className="space-y-1.5">
                 <p className="text-caption">{card.title}</p>
                 <p className="text-metric">
-                  {typeof card.value === 'number' ? card.value.toLocaleString('vi-VN') : card.value}
+                  {typeof card.value === 'number' ? formatDisplayNumber(card.value) : card.value}
                 </p>
               </div>
               <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${card.gradient} shadow-lg ${card.shadow} transition-transform group-hover:scale-110`}>
@@ -405,15 +401,10 @@ export default function DashboardCharts({
                   {/* Price + date */}
                   <div className="text-right shrink-0">
                     <p className="text-xs font-bold tabular-nums" style={{ color: 'var(--foreground)' }}>
-                      {formatPrice(order.total_price)} UZS
+                      {formatDisplayNumber(order.total_price)} UZS
                     </p>
                     <p className="text-caption mt-0.5 tabular-nums">
-                      {new Date(order.created_at).toLocaleDateString('vi-VN', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDashboardDate(order.created_at)}
                     </p>
                   </div>
                 </div>

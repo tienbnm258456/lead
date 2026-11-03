@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, type RetailCrmOrderPayload } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -16,7 +16,7 @@ type RouteContext = {
  * Only orders with sync_status FAILED or TIMEOUT can be retried.
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

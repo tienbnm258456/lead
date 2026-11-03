@@ -1,6 +1,7 @@
+import { dataScope } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAuth, requireAdmin } from '@/lib/require-auth';
 
 /**
  * GET /api/orders/[id]
@@ -16,7 +17,7 @@ export async function GET(
   const { id } = await params;
   try {
     const order = await prisma.order.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(id), ...dataScope(auth.user) },
       include: { sync_logs: { orderBy: { created_at: 'desc' }, take: 5 } },
     });
     if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -35,7 +36,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   const { id } = await params;
@@ -70,7 +71,7 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   const { id } = await params;

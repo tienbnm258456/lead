@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSettings, toMs } from '@/lib/settings-cache';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 /**
  * GET /api/storage
@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/require-auth';
  * + thống kê exported/unexported + lịch sử activity
  */
 export async function GET() {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -134,7 +134,7 @@ export async function GET() {
  * Đồng thời auto-cleanup: sync_logs + activity_logs theo cấu hình động.
  */
 export async function DELETE(request: Request) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

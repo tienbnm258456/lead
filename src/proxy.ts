@@ -46,6 +46,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (user && ((pathname.startsWith('/admin/storage') && user.role !== 'ADMIN') ||
+    ((pathname.startsWith('/admin/accounts') || pathname === '/register') && !['ADMIN', 'ADMIN2'].includes(user.role)))) {
+    return NextResponse.redirect(new URL('/admin', request.url));
+  }
+
   // If trying to access auth pages (login/register/forgot-password) while already authenticated
   if (isAuthPage && user) {
     return NextResponse.redirect(new URL('/admin', request.url));

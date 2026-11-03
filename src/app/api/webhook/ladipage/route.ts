@@ -81,7 +81,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
   try {
     // ── Look up LandingPage by api_key ─────────────────────────────
     const landingPage = await prisma.landingPage.findUnique({
-      where: { api_key: apiKey, active: true },
+      where: { api_key: apiKey, active: true, deleted_at: null },
       include: {
         product: {
           include: {
@@ -180,6 +180,8 @@ export const POST = withLogger(async function POST(request: NextRequest) {
         total_price: totalPrice,
         source: 'ladipage',
         landing_slug: product.slug,
+        group_id: landingPage.group_id,
+        landing_page_id: landingPage.id,
         selected_package: packageOption || resolved?.items.map(item => item.variantLabel).join(" | ") || null,
         selected_size: sizeOption || null,
         sync_status: selectionError ? 'FAILED' : 'PENDING',

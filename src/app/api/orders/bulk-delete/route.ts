@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 /**
  * POST /api/orders/bulk-delete
@@ -8,7 +8,7 @@ import { requireAuth } from '@/lib/require-auth';
  * Body: { ids: number[] }
  */
 export async function POST(request: Request) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

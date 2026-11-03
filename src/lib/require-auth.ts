@@ -51,3 +51,10 @@ export async function requireAdmin(): Promise<AuthResult> {
   }
   return result;
 }
+
+export async function requireUserManager(): Promise<AuthResult> {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+  if (!['ADMIN', 'ADMIN2'].includes(auth.user.role)) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  return auth;
+}

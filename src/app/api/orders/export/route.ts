@@ -1,3 +1,4 @@
+import { dataScope, isTotalAdmin } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('dateTo') || '';
 
     // ── Build Prisma where clause ──
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = { ...dataScope(auth.user) };
 
     if (search) {
       where.OR = [
@@ -235,7 +236,7 @@ export async function GET(request: NextRequest) {
     // ── Mark as exported ──
     const now = new Date();
     const notExportedIds = orders.filter(o => !o.exported_at).map(o => o.id);
-    if (notExportedIds.length > 0) {
+    if (isTotalAdmin(auth.user) && notExportedIds.length > 0) {
       await prisma.order.updateMany({
         where: { id: { in: notExportedIds } },
         data: { exported_at: now },

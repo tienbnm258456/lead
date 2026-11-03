@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import {
   Zap,
@@ -16,10 +16,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const subscribeToMount = () => () => {};
+
 export default function LoginPage() {
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToMount, () => true, () => false);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -28,12 +30,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-
-  const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -60,15 +57,18 @@ export default function LoginPage() {
         return;
       }
 
+      await queryClient.cancelQueries();
+      queryClient.clear();
       toast.success('Đăng nhập thành công! Đang chuyển hướng...');
 
       // Get callback URL from search params
       const searchParams = new URLSearchParams(window.location.search);
-      const callbackUrl = searchParams.get('callbackUrl') || '/admin';
+      const requested = searchParams.get('callbackUrl') || '/admin';
+      const target = new URL(requested, window.location.origin);
+      const callbackUrl = target.origin === window.location.origin ? target.pathname + target.search : '/admin';
 
       setTimeout(() => {
-        router.push(callbackUrl);
-        router.refresh();
+        window.location.replace(callbackUrl);
       }, 500);
     } catch {
       setError('Không thể kết nối đến máy chủ. Vui lòng thử lại.');

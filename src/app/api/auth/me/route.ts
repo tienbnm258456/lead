@@ -17,5 +17,7 @@ export async function GET() {
     authenticated: true,
     name: user.name || user.username,
     role: user.role,
+    group_id: user.group_id,
+    id: user.id,
   });
 }

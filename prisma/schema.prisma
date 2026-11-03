@@ -40,6 +40,8 @@ enum OrderSyncStatus {
 
 /// Bảng sản phẩm — mỗi sản phẩm gắn với 1 hoặc nhiều Landing Page
 model Product {
+  group_id Int?
+  group AccessGroup? @relation(fields: [group_id], references: [id])
   id     Int    @id @default(autoincrement())
   name   String @db.VarChar(255) /// Tên sản phẩm hiển thị (VD: "Đai lưng", "Kem tẩy lông")
   slug   String @unique @db.VarChar(100) /// Định danh URL-safe, tự tạo từ tên (VD: "dai-lung-abc123")
@@ -110,6 +112,10 @@ model ProductVariant {
 
 /// Đăng ký Landing Page — mỗi trang có 1 api_key riêng
 model LandingPage {
+  deleted_at DateTime?
+  created_by_id Int?
+  group_id Int?
+  group AccessGroup? @relation(fields: [group_id], references: [id])
   id         Int     @id @default(autoincrement())
   name       String  @db.VarChar(255)         /// Tên trang hiển thị (VD: "Kem tẩy lông UZ", "Đai lưng v2")
   api_key    String  @unique @db.VarChar(100) /// Khóa xác thực — tự gen khi tạo, dùng trong URL webhook
@@ -124,6 +130,7 @@ model LandingPage {
   @@index([product_id])
   @@index([active])
   @@map("landing_pages")
+  @@index([group_id])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +146,10 @@ model LandingPage {
 
 /// Đơn hàng — nhận từ LadiPage webhook, đồng bộ sang RetailCRM
 model Order {
+  landing_page_id Int?
+  created_by_id Int?
+  group_id Int?
+  group AccessGroup? @relation(fields: [group_id], references: [id])
   id               Int    @id @default(autoincrement())
   external_id      String @unique @db.VarChar(100) /// Mã đơn hàng (ORD-00001, TEST-00001)
 
@@ -180,6 +191,7 @@ model Order {
   @@index([exported_at])
   @@index([created_at])
   @@map("orders")
+  @@index([group_id])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,12 +279,16 @@ model SystemSetting {
 
 enum AdminRole {
   ADMIN  // Toàn quyền (bao gồm quản lý tài khoản)
+  ADMIN2 // Quản lý nhóm
   USER   // Full quyền trừ quản lý tài khoản
-  VIEWER // Chỉ xem
 }
 
 /// Tài khoản quản trị viên
 model AdminUser {
+  session_version Int @default(1)
+  created_by_id Int?
+  group_id Int?
+  group AccessGroup? @relation(fields: [group_id], references: [id])
   id             Int       @id @default(autoincrement())
   username       String    @unique @db.VarChar(50)  /// Tên đăng nhập (unique)
   email          String?   @unique @db.VarChar(255) /// Email (dùng để quên mật khẩu)
@@ -291,4 +307,15 @@ model AdminUser {
   @@index([username])
   @@index([email])
   @@map("admin_users")
+  @@index([group_id])
+}
+
+model AccessGroup {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(100)
+  active Boolean @default(true)
+  users AdminUser[]
+  products Product[]
+  pages LandingPage[]
+  orders Order[]
 }

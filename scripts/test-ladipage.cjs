@@ -94,10 +94,10 @@ test('retry rebuilds full UZS stored items, keeps shipping and divides only at C
     $transaction: async () => [{ id: 1, external_id: 'GF-1', sync_status: 'SUCCESS' }],
   };
   const retry = load('src/app/api/retailcrm/orders/[id]/retry/route.ts', {
-    '@/lib/ladipage-order': helpers, '@/lib/prisma': { prisma },
+    '@/lib/ladipage-order': helpers, '@/lib/permissions': load('src/lib/permissions.ts'), '@/lib/prisma': { prisma },
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
     '@/lib/retailcrm': { createRetailCrmOrder: async payload => { sent = crm.buildOrderPayload(payload); return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 99 } }; } },
-    '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({}) },
+    '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({ user: { id: 1, role: 'ADMIN' } }), requireAdmin: async () => ({ user: { id: 1, role: 'ADMIN' } }) },
   });
   const response = await retry.POST({}, { params: Promise.resolve({ id: '1' }) });
   assert.equal(response.status, 200);
@@ -157,10 +157,10 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
     orderSyncLog: { create: async () => ({}) }, $transaction: async () => [],
   };
   const route = load('src/app/api/orders/route.ts', {
-    '@/lib/ladipage-order': helpers, '@/lib/prisma': { prisma },
+    '@/lib/ladipage-order': helpers, '@/lib/permissions': load('src/lib/permissions.ts'), '@/lib/prisma': { prisma },
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
     '@/lib/retailcrm': { createRetailCrmOrder: async payload => { sent = crm.buildOrderPayload(payload); return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 99 } }; } },
-    '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({}) },
+    '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({ user: { id: 1, role: 'ADMIN' } }), requireAdmin: async () => ({ user: { id: 1, role: 'ADMIN' } }) },
   });
   const body = { customer_name: 'Test User', customer_phone: '0987654573', delivery_address: 'Test', landing_page_id: 7, variant_id: 2,
     selected_size: 'S o‘lcham: 55 kg dan kam', total_price: 1, selected_package: 'wrong', landing_slug: 'wrong' };

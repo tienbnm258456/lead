@@ -1,111 +1,34 @@
-// Authentication configuration & session helpers
-// Now backed by database (AdminUser table) with hashed passwords
-
+import { prisma } from './prisma';
 export const AUTH_COOKIE_NAME = 'lead_admin_token';
-export const AUTH_SECRET = (() => {
-  const secret = process.env.AUTH_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('⛔ AUTH_SECRET environment variable is required in production!');
-  }
-  console.warn('⚠️ AUTH_SECRET not set — using default key. KHÔNG dùng trên production!');
-  return 'dev_only_default_key_change_me_in_production';
-})();
-
+export const AUTH_SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev_only_default_key_change_me_in_production');
+if (!AUTH_SECRET) throw new Error('AUTH_SECRET is required in production');
 export interface AuthUser {
-  id: number;
-  username: string;
-  name: string;
-  role: string;
-  email?: string | null;
+  id: number; username: string; name: string; role: string; email?: string | null;
+  group_id?: number | null; session_version?: number;
 }
-
-// Simple Edge-compatible token generator using Web Crypto API
-// Cache CryptoKey + TextEncoder (tạo 1 lần, dùng lại cho mọi request)
 const encoder = new TextEncoder();
-let _cachedKey: CryptoKey | null = null;
-
-async function getCryptoKey(): Promise<CryptoKey> {
-  if (_cachedKey) return _cachedKey;
-  _cachedKey = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(AUTH_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify']
-  );
-  return _cachedKey;
+let cachedKey: CryptoKey | undefined;
+async function key() {
+  return cachedKey ||= await crypto.subtle.importKey('raw', encoder.encode(AUTH_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
-
-function bufferToHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function hexToBuffer(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
-
 export async function createAuthToken(user: AuthUser): Promise<string> {
-  const payload = {
-    id: user.id,
-    username: user.username,
-    name: user.name,
-    role: user.role,
-    email: user.email,
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
-  };
-
-  const payloadStr = JSON.stringify(payload);
-  const payloadBase64 = btoa(unescape(encodeURIComponent(payloadStr)));
-
-  const key = await getCryptoKey();
-  const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payloadBase64));
-  const signatureHex = bufferToHex(signatureBuffer);
-
-  return `${payloadBase64}.${signatureHex}`;
+  const data = btoa(unescape(encodeURIComponent(JSON.stringify({ id: user.id, session_version: user.session_version, exp: Date.now() + 7 * 86400000 }))));
+  const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', await key(), encoder.encode(data)));
+  return data + '.' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
-
-export async function verifyAuthToken(token: string | undefined | null): Promise<AuthUser | null> {
+export async function verifyAuthToken(token: string | null | undefined): Promise<AuthUser | null> {
   if (!token) return null;
-
   try {
-    const [payloadBase64, signatureHex] = token.split('.');
-    if (!payloadBase64 || !signatureHex) return null;
-
-
-    const key = await getCryptoKey();
-
-    // Constant-time comparison via crypto.subtle.verify (chống timing attack)
-    const signatureBytes = hexToBuffer(signatureHex);
-    const sigBuffer = new ArrayBuffer(signatureBytes.length);
-    new Uint8Array(sigBuffer).set(signatureBytes);
-    const isValid = await crypto.subtle.verify(
-      'HMAC', key, sigBuffer, encoder.encode(payloadBase64)
-    );
-
-    if (!isValid) return null;
-
-    const payloadJson = decodeURIComponent(escape(atob(payloadBase64)));
-    const payload = JSON.parse(payloadJson);
-
-    if (payload.exp && Date.now() > payload.exp) {
-      return null; // Expired
-    }
-
-    return {
-      id: payload.id,
-      username: payload.username,
-      name: payload.name,
-      role: payload.role,
-      email: payload.email,
-    };
-  } catch {
-    return null;
-  }
+    const parts = token.split('.');
+    if (parts.length !== 2 || !/^[0-9a-f]{64}$/.test(parts[1])) return null;
+    const signature = Uint8Array.from(parts[1].match(/../g)!, pair => parseInt(pair, 16));
+    if (!await crypto.subtle.verify('HMAC', await key(), signature, encoder.encode(parts[0]))) return null;
+    const payload = JSON.parse(decodeURIComponent(escape(atob(parts[0]))));
+    if (!Number.isFinite(payload.exp) || Date.now() >= payload.exp || !Number.isInteger(payload.id) || !Number.isInteger(payload.session_version)) return null;
+    const user = await prisma.adminUser.findUnique({ where: { id: payload.id }, include: { group: true } });
+    if (!user?.active || user.session_version !== payload.session_version || (user.group && !user.group.active)) return null;
+    if (!['ADMIN', 'ADMIN2', 'USER'].includes(user.role)) return null;
+    return { id: user.id, username: user.username, name: user.name, role: user.role, email: user.email,
+      group_id: user.group_id, session_version: user.session_version };
+  } catch { return null; }
 }

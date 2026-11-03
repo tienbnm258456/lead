@@ -9,6 +9,7 @@ import {
   ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { queryScope } from '@/lib/query-scope';
 import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
 
 interface Order extends OrderDetailData {
@@ -116,6 +117,10 @@ async function fetchOrders(filters: OrderFilters): Promise<OrdersResponse> {
 
 export default function OrdersPage() {
   const queryClient = useQueryClient();
+  const [currentRole, setCurrentRole] = useState('');
+  const [viewerScope, setViewerScope] = useState<string | null>(null);
+  const canEditOrders = currentRole === 'ADMIN';
+  useEffect(() => { fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(user => { setCurrentRole(user.role); setViewerScope(queryScope(user)); }).catch(() => window.location.replace('/login')); }, []);
   const [filters, setFilters] = useState<OrderFilters>({
     page: 1,
     pageSize: 10,
@@ -145,8 +150,9 @@ export default function OrdersPage() {
   const selectedVariant = variants.find(v => v.id === selectedVariantId);
   const hasSizes = selectedProduct?.has_sizes && selectedProduct?.sizes?.options?.length;
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['orders', filters],
+  const { data, isPending: isLoading, isFetching } = useQuery({
+    queryKey: ['orders', viewerScope, filters],
+    enabled: viewerScope !== null,
     queryFn: () => fetchOrders(filters),
   });
 
@@ -249,6 +255,7 @@ export default function OrdersPage() {
   };
 
   const openEditForm = (o: Order) => {
+    if (!canEditOrders) return;
     setEditOrder(o);
     setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
     setSelectedLPId(null);
@@ -585,7 +592,7 @@ export default function OrdersPage() {
       )}
 
       {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
+      {canEditOrders && selectedIds.size > 0 && (
         <div className="flex items-center gap-3 rounded-xl border p-3 animate-fade-in"
           style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
           <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
@@ -608,10 +615,10 @@ export default function OrdersPage() {
           <table className="w-full">
             <thead>
               <tr style={{ background: 'var(--muted)' }}>
-                <th className="w-10 px-4 py-3.5">
+                {canEditOrders && <th className="w-10 px-4 py-3.5">
                   <input type="checkbox" className="rounded h-4 w-4" checked={orders.length > 0 && selectedIds.size === orders.length}
                     onChange={toggleSelectAll} />
-                </th>
+                </th>}
                 {columns.map(col => {
                   // Right-align price header
                   const align = ['product_price', 'delivery_fee', 'total_price'].includes(col.key) ? 'text-right' : 'text-left';
@@ -667,7 +674,7 @@ export default function OrdersPage() {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     {/* Checkbox */}
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3.5" hidden={!canEditOrders}>
                       <input type="checkbox" className="rounded h-4 w-4"
                         checked={selectedIds.has(order.id)}
                         onChange={() => toggleSelect(order.id)} />
@@ -767,6 +774,7 @@ export default function OrdersPage() {
                           aria-label={'Xem chi tiết đơn ' + order.external_id} title="Xem chi tiết đơn hàng">
                           <Eye className="h-4 w-4" />
                         </button>
+                        {canEditOrders && <>
                         <button onClick={() => openEditForm(order)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                           style={{ color: 'var(--muted-foreground)' }}
@@ -796,6 +804,7 @@ export default function OrdersPage() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                         )}
+                        </>}
                       </div>
                     </td>
                   </tr>

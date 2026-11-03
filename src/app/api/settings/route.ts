@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { invalidateSettingsCache } from '@/lib/settings-cache';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 /**
  * GET /api/settings
@@ -16,7 +16,7 @@ const DEFAULTS: Record<string, string> = {
 };
 
 export async function GET() {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -38,7 +38,7 @@ export async function GET() {
  * Body: { "key1": "value1", "key2": "value2" }
  */
 export async function PUT(request: Request) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
@@ -94,7 +94,7 @@ export async function PUT(request: Request) {
  * Reload settings cache từ DB (dùng khi thay đổi trực tiếp trong DB)
  */
 export async function POST() {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {

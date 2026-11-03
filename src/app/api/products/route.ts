@@ -1,3 +1,4 @@
+import { dataScope } from '@/lib/permissions';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/require-auth';
@@ -12,7 +13,7 @@ export async function GET() {
 
   try {
     const products = await prisma.product.findMany({
-      where: { active: true },
+      where: { active: true, ...dataScope(auth.user) },
       select: { id: true, name: true, slug: true },
       orderBy: { name: 'asc' },
     });

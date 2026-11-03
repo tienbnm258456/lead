@@ -39,6 +39,8 @@ export async function POST(request: Request) {
 
     const user = {
       id: dbUser.id,
+      session_version: dbUser.session_version,
+      group_id: dbUser.group_id,
       username: dbUser.username,
       name: dbUser.name,
       role: dbUser.role,

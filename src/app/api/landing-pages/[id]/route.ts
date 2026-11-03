@@ -1,3 +1,4 @@
+import { landingScope, isTotalAdmin } from '@/lib/permissions';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -45,7 +46,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Fetch existing landing page
     const existing = await prisma.landingPage.findUnique({
-      where: { id: numId },
+      where: { id: numId, ...landingScope(auth.user) },
       include: { product: true },
     });
 
@@ -53,7 +54,19 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Landing page not found' }, { status: 404 });
     }
 
+    let assignedGroup = existing.group_id;
+    if (isTotalAdmin(auth.user) && body.group_id !== undefined) {
+      assignedGroup = body.group_id === null ? null : Number(body.group_id);
+      if (assignedGroup !== null && (!Number.isInteger(assignedGroup) || assignedGroup <= 0)) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
+      if (assignedGroup && !await prisma.accessGroup.findFirst({ where: { id: assignedGroup, active: true } })) return NextResponse.json({ error: 'Nhóm không hợp lệ' }, { status: 400 });
+    }
     const result = await prisma.$transaction(async (tx) => {
+      if (assignedGroup !== existing.group_id) {
+        await tx.landingPage.update({ where: { id: numId }, data: { group_id: assignedGroup } });
+        await tx.product.update({ where: { id: existing.product_id }, data: { group_id: assignedGroup } });
+        const product = await tx.product.findUniqueOrThrow({ where: { id: existing.product_id } });
+        await tx.order.updateMany({ where: { OR: [{ landing_page_id: numId }, { landing_page_id: null, landing_slug: product.slug }] }, data: { group_id: assignedGroup, landing_page_id: numId } });
+      }
       // 1. Update landing page fields
       const updateLP: Record<string, unknown> = {};
       const updateProduct: Record<string, unknown> = {};
@@ -81,7 +94,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       // Update landing page
       if (Object.keys(updateLP).length > 0) {
         await tx.landingPage.update({
-          where: { id: numId },
+          where: { id: numId, ...landingScope(auth.user) },
           data: updateLP,
         });
       }
@@ -101,6 +114,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           data: { active: false },
         });
 
+        if (sentIds.length && await tx.productVariant.count({ where: { id: { in: sentIds }, product_id: existing.product_id } }) !== new Set(sentIds).size) throw new Error('Variant không thuộc sản phẩm');
         // Upsert each variant
         for (const v of body.variants) {
           if (v.id) {
@@ -141,7 +155,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
       // 3. Return updated landing page
       return tx.landingPage.findUnique({
-        where: { id: numId },
+        where: { id: numId, ...landingScope(auth.user) },
         include: {
           product: {
             include: {
@@ -178,15 +192,15 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (auth.error) return auth.error;
 
   try {
-    const lp = await prisma.landingPage.findUnique({ where: { id: numId } });
+    const lp = await prisma.landingPage.findUnique({ where: { id: numId, ...landingScope(auth.user) } });
     if (!lp) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     // Delete landing page, then product (cascade deletes variants)
     await prisma.$transaction([
-      prisma.landingPage.delete({ where: { id: numId } }),
-      prisma.product.delete({ where: { id: lp.product_id } }),
+      prisma.landingPage.update({ where: { id: numId, ...landingScope(auth.user) }, data: { active: false, deleted_at: new Date() } }),
+      prisma.product.update({ where: { id: lp.product_id }, data: { active: false } }),
     ]);
 
     return NextResponse.json({ success: true });
@@ -218,7 +232,7 @@ export async function PATCH(_request: NextRequest, context: RouteContext) {
     const newApiKey = crypto.randomBytes(24).toString('base64url');
 
     const landingPage = await prisma.landingPage.update({
-      where: { id: numId },
+      where: { id: numId, ...landingScope(auth.user) },
       data: { api_key: newApiKey },
       include: {
         product: {

@@ -8,6 +8,7 @@ import {
   Globe, CheckCircle, XCircle, ExternalLink, RotateCcw, Package, Ruler,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { queryScope } from '@/lib/query-scope';
 import { parseUZS } from '@/lib/money';
 
 interface Variant {
@@ -42,6 +43,7 @@ interface LandingPage {
   product_id: number;
   product: Product;
   active: boolean;
+  group_id?: number | null;
   created_at: string;
 }
 
@@ -74,6 +76,17 @@ const emptyVariant = (): FormVariant => ({ label: '', quantity: 1, price: '', de
 
 export default function LandingPagesPage() {
   const queryClient = useQueryClient();
+  const [currentRole, setCurrentRole] = useState('');
+  const [viewerScope, setViewerScope] = useState<string | null>(null);
+  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
+  const [formGroup, setFormGroup] = useState('');
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(user => {
+      setViewerScope(queryScope(user));
+      setCurrentRole(user.role || '');
+      if (user.role === 'ADMIN') fetch('/api/admin/users').then(r => r.json()).then(data => setGroups(data.groups || []));
+    }).catch(() => {});
+  }, []);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -87,8 +100,9 @@ export default function LandingPagesPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['landing-pages', search],
+  const { data, isPending: isLoading, isFetching } = useQuery({
+    queryKey: ['landing-pages', viewerScope, search],
+    enabled: viewerScope !== null,
     queryFn: () => fetchLandingPages(search),
   });
 
@@ -161,6 +175,7 @@ export default function LandingPagesPage() {
   };
 
   const openCreateForm = () => {
+    setFormGroup('');
     setEditItem(null); setFormName('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
     setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
@@ -168,6 +183,7 @@ export default function LandingPagesPage() {
   };
 
   const openEditForm = (page: LandingPage) => {
+    setFormGroup(String(page.group_id || ''));
     setEditItem(page);
     setFormName(page.name);
     setFormVariants(
@@ -217,6 +233,7 @@ export default function LandingPagesPage() {
 
     const payload = {
       name: formName,
+      ...(currentRole === 'ADMIN' ? { group_id: formGroup ? Number(formGroup) : null } : {}),
       variants,
       has_sizes: formHasSizes,
       option_label: formHasSizes ? formOptionLabel : undefined,
@@ -455,7 +472,7 @@ export default function LandingPagesPage() {
               {showDeleteConfirm === page.id && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/60 backdrop-blur-sm animate-fade-in z-10">
                   <p className="text-sm font-semibold text-white mb-1">Xóa Landing Page này?</p>
-                  <p className="text-xs text-white/70 mb-4">Sản phẩm & gói giá cũng sẽ bị xóa</p>
+                  <p className="text-xs text-white/70 mb-4">Ngừng nhận webhook, giữ nguyên lịch sử đơn hàng</p>
                   <div className="flex gap-2">
                     <button onClick={() => setShowDeleteConfirm(null)} className="rounded-lg border border-white/30 px-4 py-1.5 text-sm text-white hover:bg-white/10">Hủy</button>
                     <button onClick={() => deleteMutation.mutate(page.id)} className="rounded-lg bg-red-600 px-4 py-1.5 text-sm text-white hover:bg-red-700" disabled={deleteMutation.isPending}>
@@ -490,6 +507,12 @@ export default function LandingPagesPage() {
 
             {/* ── Content (scrollable) ── */}
             <div className="flex-1 overflow-y-auto px-7 space-y-6">
+              {currentRole === 'ADMIN' && <label className="block text-sm font-semibold">Nhóm sở hữu
+                <select className="mt-2 w-full rounded-lg border p-3" style={{ background: 'var(--card)', color: 'var(--foreground)' }} value={formGroup} onChange={e => setFormGroup(e.target.value)}>
+                  <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+                </select>
+                <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>Đổi nhóm sẽ chuyển Landing Page và toàn bộ đơn hàng liên quan sang nhóm mới.</span>
+              </label>}
               {/* Name */}
               <div>
                 <label className="mb-2 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tên trang / Sản phẩm <span className="text-red-500">*</span></label>

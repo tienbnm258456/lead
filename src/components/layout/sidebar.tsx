@@ -16,7 +16,7 @@ import {
   KeyRound,
   Users,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -48,7 +48,7 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
 
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -61,10 +61,12 @@ export function Sidebar() {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Logout failed');
+      await queryClient.cancelQueries();
+      queryClient.clear();
       toast.success('Đã đăng xuất');
-      router.push('/login');
-      router.refresh();
+      window.location.replace('/login');
     } catch {
       toast.error('Lỗi khi đăng xuất');
       setLoggingOut(false);
@@ -106,7 +108,7 @@ export function Sidebar() {
             Menu
           </p>
         )}
-        {navItems.map((item) => {
+        {navItems.filter(item => item.href !== '/admin/storage' || userRole === 'ADMIN').map((item) => {
           const isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(item.href));
           return (
             <Link
@@ -147,7 +149,7 @@ export function Sidebar() {
           );
         })}
         {/* Menu Tài khoản — chỉ hiện cho ADMIN */}
-        {userRole === 'ADMIN' && (
+        {['ADMIN', 'ADMIN2'].includes(userRole) && (
           <>
             {!collapsed && (
               <p className="mt-4 mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--sidebar-icon)' }}>

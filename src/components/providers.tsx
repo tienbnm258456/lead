@@ -19,7 +19,16 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange
+      // next-themes 0.4 renders its bootstrap script even on client mounts.
+      // Keep it executable in server HTML (prevents theme flash), but inert on
+      // client renders: the provider's effects already apply theme changes.
+      scriptProps={{ type: typeof window === 'undefined' ? undefined : 'application/x-next-themes' }}
+    >
       <QueryClientProvider client={queryClient}>
         {children}
         <Toaster

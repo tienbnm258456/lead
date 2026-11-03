@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       where: { id: user.id },
       data: {
         password_hash: passwordHash,
+        session_version: { increment: 1 },
         reset_token: null,
         reset_token_exp: null,
       },

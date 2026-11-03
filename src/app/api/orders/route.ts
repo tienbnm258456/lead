@@ -1,3 +1,4 @@
+import { dataScope, landingScope } from '@/lib/permissions';
 import { ensureOfferXmlIds, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
     // Build where clause
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { ...dataScope(auth.user) };
 
     if (search) {
       where.OR = [
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where }),
       // Get all landing pages with product info for the filter dropdown
       prisma.landingPage.findMany({
-        where: { active: true },
+        where: { active: true, ...landingScope(auth.user) },
         include: {
           product: { select: { name: true, slug: true } },
         },
@@ -155,7 +156,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Vui lòng chọn Landing Page và gói sản phẩm' }, { status: 400 });
     }
     const page = await prisma.landingPage.findUnique({
-      where: { id: landingPageId, active: true },
+      where: { id: landingPageId, active: true, ...landingScope(auth.user) },
       include: { product: { include: { variants: { where: { id: variantId, active: true } } } } },
     });
     if (!page || !page.product.active || page.product.variants.length !== 1) {
@@ -180,6 +181,9 @@ export async function POST(request: Request) {
         items_json: JSON.stringify(resolved.items),
         total_price: resolved.totalPrice,
         source: 'admin',
+        group_id: page.group_id,
+        landing_page_id: page.id,
+        created_by_id: auth.user.id,
         landing_slug: landing_slug || null,
         selected_package: selected_package || null,
         selected_size: selected_size || null,

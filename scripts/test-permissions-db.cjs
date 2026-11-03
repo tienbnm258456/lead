@@ -1,0 +1,97 @@
+/** Local PostgreSQL integration. All fixtures are rolled back. Never calls CRM. */
+const fs = require('node:fs'); const assert = require('node:assert/strict'); const ts = require('typescript');
+require('@next/env').loadEnvConfig(process.cwd(), true);
+if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(process.env.DATABASE_URL).hostname)) throw new Error('Only a local test database is allowed');
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient();
+const NextResponse = class extends Response { static json(body, options) { return new NextResponse(JSON.stringify(body), { status: options?.status || 200, headers: { 'Content-Type': 'application/json' } }); } };
+function load(file, mocks = {}) { const module = { exports: {} }; const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true, target: ts.ScriptTarget.ES2022 } }).outputText;
+  new Function('require', 'module', 'exports', code)(name => name in mocks ? mocks[name] : require(name), module, module.exports); return module.exports; }
+const perms = load('src/lib/permissions.ts'); const helpers = load('src/lib/ladipage-order.ts'); const password = load('src/lib/password.ts');
+const rollback = new Error('rollback fixtures');
+(async () => {
+  try { await prisma.$transaction(async tx => {
+    const groupA = await tx.accessGroup.create({ data: { name: 'TEST A' } }); const groupB = await tx.accessGroup.create({ data: { name: 'TEST B' } });
+    const tag = 'rbac_' + Date.now();
+    const makeUser = (suffix, role, group_id) => tx.adminUser.create({ data: { username: tag + suffix, name: suffix, password_hash: 'not-used', role, group_id } });
+    const root = await makeUser('root', 'ADMIN', null); const manager = await makeUser('manager', 'ADMIN2', groupA.id);
+    const member = await makeUser('member', 'USER', groupA.id); const other = await makeUser('other', 'USER', groupB.id);
+    const makePage = async (suffix, group_id) => {
+      const product = await tx.product.create({ data: { name: tag + suffix, slug: tag + suffix, group_id } });
+      const variant = await tx.productVariant.create({ data: { product_id: product.id, label: 'Gói test', price: 610000, delivery_fee: 65000, promotion: '2+2', xml_id: 'XMLTEST_OFFER' } });
+      const page = await tx.landingPage.create({ data: { name: product.name, api_key: tag + suffix, product_id: product.id, group_id } }); return { product, variant, page };
+    };
+    const a = await makePage('A', groupA.id); const b = await makePage('B', groupB.id);
+    for (const fixture of [a, b]) await tx.order.create({ data: { external_id: tag + fixture.product.slug, customer_name: 'Test', customer_phone: '000', delivery_address: 'Test', items_json: JSON.stringify([{ xmlId: 'X', quantity: 1, initialPrice: 610000, deliveryFee: 65000 }]), total_price: 675000, group_id: fixture.page.group_id, landing_page_id: fixture.page.id, landing_slug: fixture.product.slug } });
+    let actor = member; let crmCalls = 0;
+    const db = new Proxy(tx, { get(target, prop) { if (prop === '$transaction') return async operations => typeof operations === 'function' ? operations(db) : Promise.all(operations); return target[prop]; } });
+    const denied = () => ({ error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) });
+    const mocks = { 'next/server': { NextResponse }, '@/lib/prisma': { prisma: db }, '@/lib/permissions': perms, '@/lib/ladipage-order': helpers, '@/lib/password': password,
+      '@/lib/require-auth': { requireAuth: async () => ({ user: actor }), requireAdmin: async () => actor.role === 'ADMIN' ? { user: actor } : denied(), requireUserManager: async () => perms.canManageUsers(actor) ? { user: actor } : denied() },
+      '@/lib/retailcrm': { createRetailCrmOrder: async () => { crmCalls++; return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 1 } }; } } };
+    const orders = load('src/app/api/orders/route.ts', mocks); const pages = load('src/app/api/landing-pages/[id]/route.ts', mocks);
+    const request = (data, search = '') => ({ json: async () => data, nextUrl: new URL('http://localhost/api/orders?search=' + tag + search) });
+    const list = async () => (await (await orders.GET(request({}))).json()).data;
+    // Search is by customer/id; fixture external IDs contain tag.
+    for (const who of [member, manager]) { actor = who; const rows = await list(); assert.equal(rows.length, 1); assert.equal(rows[0].group_id, groupA.id); }
+    actor = root; assert.equal((await list()).length, 2);
+    actor = member;
+    const foreign = await orders.POST(request({ customer_name: 'Test', customer_phone: '000', delivery_address: 'x', landing_page_id: b.page.id, variant_id: b.variant.id }));
+    assert.equal(foreign.status, 400); assert.equal(crmCalls, 0);
+    const own = await orders.POST(request({ customer_name: 'Test', customer_phone: '000', delivery_address: 'x', landing_page_id: a.page.id, variant_id: a.variant.id, group_id: groupB.id }));
+    assert.equal(own.status, 201); const created = (await own.json()).data; assert.equal(created.group_id, groupA.id); assert.equal(crmCalls, 1);
+    // An Excel export must contain only this group's rows and must not mark/purge orders.
+    const exportRoute = load('src/app/api/orders/export/route.ts', mocks);
+    const beforeCount = await tx.order.count();
+    const response = await exportRoute.GET(request({}));
+    assert.equal(response.status, 200);
+    const ExcelJS = require('exceljs'); const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()));
+    const cells = workbook.worksheets.flatMap(sheet => sheet.getColumn(6).values).filter(value => typeof value === 'string');
+    assert.ok(cells.includes(tag + a.product.slug)); assert.ok(!cells.includes(tag + b.product.slug));
+    assert.equal(await tx.order.count(), beforeCount);
+    const original = await tx.order.findFirst({ where: { external_id: tag + a.product.slug } }); assert.equal(original.exported_at, null);
+    const pageCreate = load('src/app/api/landing-pages/route.ts', mocks);
+    const newPage = await pageCreate.POST(request({ name: tag + ' spoof', group_id: groupB.id, variants: [{ label: 'New', price: 100000 }] }));
+    assert.equal(newPage.status, 201); assert.equal((await newPage.json()).group_id, groupA.id);
+    const newPageId = (await tx.landingPage.findFirst({ where: { name: tag + ' spoof' } })).id;
+    const movedOrder = await tx.order.create({ data: { external_id: tag + '_move', customer_name: 'Move', customer_phone: '000', delivery_address: 'Test', total_price: 100000, items_json: '[]', group_id: groupA.id, landing_page_id: newPageId } });
+    // A member cannot move the page even by directly submitting group_id.
+    assert.equal((await pages.PUT(request({ group_id: groupB.id }), { params: Promise.resolve({ id: String(newPageId) }) })).status, 200);
+    assert.equal((await tx.landingPage.findUnique({ where: { id: newPageId } })).group_id, groupA.id);
+    actor = root;
+    assert.equal((await pages.PUT(request({ group_id: groupB.id }), { params: Promise.resolve({ id: String(newPageId) }) })).status, 200);
+    const movedPage = await tx.landingPage.findUnique({ where: { id: newPageId } });
+    assert.equal(movedPage.group_id, groupB.id);
+    assert.equal((await tx.product.findUnique({ where: { id: movedPage.product_id } })).group_id, groupB.id);
+    assert.equal((await tx.order.findUnique({ where: { id: movedOrder.id } })).group_id, groupB.id);
+    actor = member;
+    assert.equal((await pages.DELETE(request({}), { params: Promise.resolve({ id: String(newPageId) }) })).status, 404);
+    actor = other;
+    assert.equal((await pages.PUT(request({ name: tag + ' moved' }), { params: Promise.resolve({ id: String(newPageId) }) })).status, 200);
+    actor = root;
+    assert.equal((await pages.PUT(request({ group_id: -1 }), { params: Promise.resolve({ id: String(newPageId) }) })).status, 400);
+    assert.equal((await pages.PUT(request({ group_id: null }), { params: Promise.resolve({ id: String(newPageId) }) })).status, 200);
+    assert.equal((await tx.order.findUnique({ where: { id: movedOrder.id } })).group_id, null);
+    actor = member;
+    assert.equal((await pages.DELETE(request({}), { params: Promise.resolve({ id: String(b.page.id) }) })).status, 404);
+    assert.equal((await pages.DELETE(request({}), { params: Promise.resolve({ id: String(a.page.id) }) })).status, 200);
+    assert.ok((await tx.landingPage.findUnique({ where: { id: a.page.id } })).deleted_at);
+    assert.ok(await tx.order.findUnique({ where: { id: created.id } }));
+    const accounts = load('src/app/api/admin/users/route.ts', mocks);
+    actor = manager;
+    assert.equal((await accounts.POST(request({ username: tag + 'bad', name: 'Bad', password: 'Password123!', role: 'ADMIN2' }))).status, 403);
+    assert.equal((await accounts.PATCH(request({ id: other.id, name: 'Hacked' }))).status, 403);
+    assert.equal((await accounts.DELETE(request({ id: other.id }))).status, 403);
+    assert.equal((await accounts.PATCH(request({ id: member.id, role: 'ADMIN' }))).status, 403);
+    const memberCreated = await accounts.POST(request({ username: tag + 'newuser', name: 'New User', password: 'Password123!', role: 'USER', group_id: groupB.id }));
+    assert.equal(memberCreated.status, 201); assert.equal((await memberCreated.json()).data.group_id, groupA.id);
+    assert.equal((await accounts.PATCH(request({ id: member.id, name: 'Updated member' }))).status, 200);
+    assert.equal((await tx.adminUser.findUnique({ where: { id: member.id } })).session_version, 2);
+    actor = member; assert.equal((await accounts.GET()).status, 403);
+    actor = root;
+    const child = await accounts.POST(request({ username: tag + 'newmanager', name: 'New Manager', password: 'Password123!', role: 'ADMIN2' }));
+    assert.equal(child.status, 201); assert.ok((await child.json()).data.group_id);
+    console.log('PASS: local DB group isolation, manual order ownership, soft delete, manager hierarchy and session revocation');
+    throw rollback;
+  }, { timeout: 30000 }); } catch (err) { if (err !== rollback) throw err; }
+})().catch(err => { console.error(err); process.exitCode = 1; }).finally(() => prisma.$disconnect());

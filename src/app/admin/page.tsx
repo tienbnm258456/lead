@@ -1,17 +1,21 @@
+import { requireAuth } from '@/lib/require-auth';
+import { dataScope } from '@/lib/permissions';
+import { redirect } from 'next/navigation';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import DashboardCharts from '@/components/dashboard-charts';
 
 // Luôn fetch data mới từ DB mỗi lần truy cập — không dùng cache tĩnh từ lúc build
 export const dynamic = 'force-dynamic';
 
-async function getStats() {
+async function getStats(scope: Prisma.OrderWhereInput) {
   const [total, pendingCount, successCount, failedCount, todayCount] = await Promise.all([
-    prisma.order.count(),
-    prisma.order.count({ where: { sync_status: 'PENDING' } }),
-    prisma.order.count({ where: { sync_status: 'SUCCESS' } }),
-    prisma.order.count({ where: { sync_status: { in: ['FAILED', 'TIMEOUT'] } } }),
+    prisma.order.count({ where: scope }),
+    prisma.order.count({ where: { ...scope, sync_status: 'PENDING' } }),
+    prisma.order.count({ where: { ...scope, sync_status: 'SUCCESS' } }),
+    prisma.order.count({ where: { ...scope, sync_status: { in: ['FAILED', 'TIMEOUT'] } } }),
     prisma.order.count({
-      where: {
+      where: { ...scope,
         created_at: {
           gte: new Date(new Date().setHours(0, 0, 0, 0)),
         },
@@ -22,7 +26,7 @@ async function getStats() {
   return { total, pendingCount, successCount, failedCount, todayCount };
 }
 
-async function getDailyOrders() {
+async function getDailyOrders(scope: Prisma.OrderWhereInput) {
   const days = 7;
   const result: { date: string; count: number; revenue: number }[] = [];
 
@@ -36,10 +40,10 @@ async function getDailyOrders() {
 
     const [count, revenueResult] = await Promise.all([
       prisma.order.count({
-        where: { created_at: { gte: dayStart, lte: dayEnd } },
+        where: { ...scope, created_at: { gte: dayStart, lte: dayEnd } },
       }),
       prisma.order.aggregate({
-        where: { created_at: { gte: dayStart, lte: dayEnd } },
+        where: { ...scope, created_at: { gte: dayStart, lte: dayEnd } },
         _sum: { total_price: true },
       }),
     ]);
@@ -54,12 +58,12 @@ async function getDailyOrders() {
   return result;
 }
 
-async function getStatusDistribution() {
+async function getStatusDistribution(scope: Prisma.OrderWhereInput) {
   const [pending, success, failed, timeout] = await Promise.all([
-    prisma.order.count({ where: { sync_status: 'PENDING' } }),
-    prisma.order.count({ where: { sync_status: 'SUCCESS' } }),
-    prisma.order.count({ where: { sync_status: 'FAILED' } }),
-    prisma.order.count({ where: { sync_status: 'TIMEOUT' } }),
+    prisma.order.count({ where: { ...scope, sync_status: 'PENDING' } }),
+    prisma.order.count({ where: { ...scope, sync_status: 'SUCCESS' } }),
+    prisma.order.count({ where: { ...scope, sync_status: 'FAILED' } }),
+    prisma.order.count({ where: { ...scope, sync_status: 'TIMEOUT' } }),
   ]);
 
   return [
@@ -70,14 +74,14 @@ async function getStatusDistribution() {
   ];
 }
 
-async function getTopLandingPages() {
+async function getTopLandingPages(scope: Prisma.OrderWhereInput) {
   // Group orders by landing_slug and count
   const results = await prisma.order.groupBy({
     by: ['landing_slug'],
     _count: { id: true },
     orderBy: { _count: { id: 'desc' } },
     take: 5,
-    where: { landing_slug: { not: null } },
+    where: { ...scope, landing_slug: { not: null } },
   });
 
   // Get product names for slugs
@@ -98,8 +102,9 @@ async function getTopLandingPages() {
   }));
 }
 
-async function getRecentOrders() {
+async function getRecentOrders(scope: Prisma.OrderWhereInput) {
   const orders = await prisma.order.findMany({
+    where: scope,
     orderBy: { created_at: 'desc' },
     take: 5,
   });
@@ -116,13 +121,16 @@ async function getRecentOrders() {
 }
 
 export default async function AdminDashboard() {
+  const auth = await requireAuth();
+  if (auth.error) redirect('/login');
+  const scope = dataScope(auth.user);
   const [stats, dailyOrders, statusDistribution, topLandingPages, recentOrders] =
     await Promise.all([
-      getStats(),
-      getDailyOrders(),
-      getStatusDistribution(),
-      getTopLandingPages(),
-      getRecentOrders(),
+      getStats(scope),
+      getDailyOrders(scope),
+      getStatusDistribution(scope),
+      getTopLandingPages(scope),
+      getRecentOrders(scope),
     ]);
 
   return (

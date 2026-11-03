@@ -6,7 +6,7 @@ import {
 } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
 import { generateExternalId } from '@/lib/order-id';
-import { requireAuth } from '@/lib/require-auth';
+import { requireAdmin } from '@/lib/require-auth';
 
 /**
  * POST /api/retailcrm/orders/sync
@@ -32,7 +32,7 @@ import { requireAuth } from '@/lib/require-auth';
  * externalId is auto-generated as ORD-{orderId} (e.g. ORD-00001)
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
