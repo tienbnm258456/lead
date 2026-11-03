@@ -155,7 +155,7 @@ export async function GET(request: Request) {
 
     // ── Log EXPORT ──
     await prisma.activityLog.create({
-      data: { action: 'EXPORT', count: orders.length, note: `[Google Sheets] ${orders.length} đơn → "${result.sheetName}"` },
+      data: { action: 'EXPORT', count: orders.length, note: `[Google Sheets] ${orders.length} đơn → "${result.sheetName}"`.slice(0, 500) },
     });
 
     console.log(`${TAG} ✅ EXPORTED — ${orders.length} đơn → "${result.sheetName}"`);
@@ -181,7 +181,7 @@ export async function GET(request: Request) {
       data: {
         action: 'PURGE',
         count: purgeResult.count,
-        note: `[Auto] Dọn ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs sau khi xuất Google Sheets "${result.sheetName}"`,
+        note: `[Auto] Dọn ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs sau khi xuất Google Sheets "${result.sheetName}"`.slice(0, 500),
       },
     });
 
@@ -195,6 +195,7 @@ export async function GET(request: Request) {
       sheetName: result.sheetName,
       totalRows: result.totalRows,
       spreadsheetUrl: result.spreadsheetUrl,
+      destinations: result.destinations,
       purgedOrders: purgeResult.count,
       purgedSyncLogs: deletedSyncLogs.count,
     });

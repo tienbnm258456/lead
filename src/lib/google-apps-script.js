@@ -1,254 +1,134 @@
-/**
- * ╔══════════════════════════════════════════════════════════════╗
- * ║  GOOGLE APPS SCRIPT — Nhận đơn hàng từ Lead Admin           ║
- * ║                                                              ║
- * ║  Paste toàn bộ code này vào Google Apps Script editor        ║
- * ║  (Extensions → Apps Script trong Google Sheets)              ║
- * ║                                                              ║
- * ║  Sau đó: Deploy → New deployment → Web app                  ║
- * ║    - Execute as: Me                                          ║
- * ║    - Who has access: Anyone                                  ║
- * ║  → Copy URL → paste vào .env GOOGLE_APPS_SCRIPT_URL          ║
- * ╚══════════════════════════════════════════════════════════════╝
- */
-
-/**
- * Xử lý POST request từ server
- */
+/** Paste into one Apps Script project. Setup: google_sheets_setup.md. */
+var EXPORT_KEY_HEADER = '_ExportRowId';
+function jsonResponse(value) {
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}
+function settings() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty('EXPORT_FOLDER_ID');
+  var secret = props.getProperty('EXPORT_SECRET');
+  if (!folderId || !secret) throw new Error('Set EXPORT_FOLDER_ID and EXPORT_SECRET in Script Properties');
+  return { props: props, folder: DriveApp.getFolderById(folderId), secret: secret,
+    prefix: props.getProperty('EXPORT_FILE_PREFIX') || 'Lead Admin' };
+}
+/** Run once in the editor to authorize Drive + Sheets access; does not export orders. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script entry point
+function checkSetup() {
+  var cfg = settings();
+  // Touch both services so the editor requests all necessary permissions.
+  SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log('Setup OK: ' + cfg.folder.getName() + ' | File prefix: ' + cfg.prefix);
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script entry point
 function doPost(e) {
+  var lock;
   try {
     var payload = JSON.parse(e.postData.contents);
-    var action = payload.action;
-
-    if (action === 'ping') {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      return jsonResponse({
-        success: true,
-        spreadsheetTitle: ss.getName(),
-        spreadsheetUrl: ss.getUrl()
-      });
-    }
-
-    if (action === 'export') {
-      return handleExport(payload);
-    }
-
-    return jsonResponse({ error: 'Unknown action: ' + action });
-  } catch (err) {
-    return jsonResponse({ error: err.toString() });
+    var cfg = settings();
+    if (payload.secret !== cfg.secret) throw new Error('Unauthorized');
+    if (payload.protocolVersion !== 2) throw new Error('Expected export protocolVersion 2');
+    if (payload.action === 'ping') return jsonResponse({ success: true, protocolVersion: 2, spreadsheetTitle: cfg.prefix });
+    if (payload.action !== 'export') throw new Error('Unknown action');
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) throw new Error('Export busy; retry later');
+    return jsonResponse(handleExport(payload, cfg));
+  } catch (error) {
+    return jsonResponse({ success: false, protocolVersion: 2, error: String(error.message || error) });
+  } finally {
+    if (lock && lock.hasLock()) lock.releaseLock();
   }
 }
-
-/**
- * Xử lý export data vào sheet
- * 
- * Logic:
- *   - Nếu sheet cùng tên đã tồn tại → APPEND thêm rows (không tạo mới)
- *   - STT được tính lại liên tục (1, 2, 3... tiếp nối từ dữ liệu cũ)
- *   - Cột "Đợt xuất" cho biết rows nào được thêm lần nào
- */
-function handleExport(payload) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetName = payload.sheetName || 'Import ' + new Date().toLocaleDateString('vi-VN');
-  var headers = payload.headers;
-  var data = payload.data;
-  var batchIndex = payload.batchIndex || 0;
-  var statusColIndex = payload.statusColIndex; // 0-based index
-
-  var sheet = null;
-  var isNewSheet = false;
-
-  // ── Batch đầu tiên: tạo sheet mới HOẶC append vào sheet cũ ──
-  if (batchIndex === 0) {
-    var existingSheet = ss.getSheetByName(sheetName);
-
-    if (existingSheet) {
-      // ── APPEND MODE: Sheet đã tồn tại → dùng lại ──
-      sheet = existingSheet;
-      isNewSheet = false;
-      Logger.log('APPEND mode: Sheet "' + sheetName + '" đã tồn tại, append thêm data');
-    } else {
-      // ── NEW MODE: Tạo sheet mới ──
-      sheet = ss.insertSheet(sheetName);
-      isNewSheet = true;
-
-      // Ghi header
-      if (headers && headers.length > 0) {
-        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-
-        var headerRange = sheet.getRange(1, 1, 1, headers.length);
-        headerRange.setFontWeight('bold');
-        headerRange.setFontSize(10);
-        headerRange.setBackground('#334488');
-        headerRange.setFontColor('#FFFFFF');
-        headerRange.setHorizontalAlignment('center');
-        headerRange.setVerticalAlignment('middle');
-        headerRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-        sheet.setFrozenRows(1);
-        sheet.setRowHeight(1, 32);
-      }
-
-      // Wrap text toàn sheet
-      sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns())
-        .setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-    }
+function annualSpreadsheet(year, cfg) {
+  var key = 'YEAR_SPREADSHEET_' + year;
+  var id = cfg.props.getProperty(key);
+  var ss;
+  if (id) {
+    // Do not silently replace an inaccessible/deleted archive with an empty file.
+    ss = SpreadsheetApp.openById(id);
   } else {
-    // Batch 2+ → lấy sheet đã tạo/đang dùng
-    sheet = ss.getSheetByName(sheetName);
+    ss = SpreadsheetApp.create(cfg.prefix + ' - ' + year);
+    cfg.props.setProperty(key, ss.getId());
   }
-
-  if (!sheet) {
-    return jsonResponse({ error: 'Sheet not found: ' + sheetName });
+  DriveApp.getFileById(ss.getId()).moveTo(cfg.folder);
+  return ss;
+}
+function productTab(ss, payload, cfg) {
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payload.productKey)
+    .map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  var key = 'TAB_' + payload.year + '_' + payload.month + '_' + digest;
+  var savedName = cfg.props.getProperty(key);
+  if (savedName) {
+    var saved = ss.getSheetByName(savedName);
+    if (!saved) throw new Error('Registered tab missing: ' + savedName);
+    return saved;
   }
-
-  // ── Ghi data ──
-  if (data && data.length > 0) {
-    var lastRow = sheet.getLastRow();
-    var existingDataRows = lastRow > 0 ? lastRow - 1 : 0; // Trừ header
-
-    // Tính lại STT liên tục từ dữ liệu cũ
-    for (var i = 0; i < data.length; i++) {
-      data[i][0] = existingDataRows + i + 1; // STT = existing + offset
-    }
-
-    // Ghi data
-    var range = sheet.getRange(lastRow + 1, 1, data.length, data[0].length);
-    range.setValues(data);
-    range.setVerticalAlignment('top');
-    range.setFontSize(10);
-    range.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-
-    // ── Tô màu cột Trạng thái ──
-    if (statusColIndex !== undefined && statusColIndex !== null) {
-      colorStatusCells(sheet, lastRow + 1, data, statusColIndex);
-    }
-
-    // ── Highlight "Đợt xuất" cột cuối nếu append ──
-    if (!isNewSheet && batchIndex === 0) {
-      // Tô nền nhẹ cho rows mới để phân biệt với rows cũ
-      var exportColIndex = data[0].length; // Cột cuối cùng (1-based)
-      var newRowsRange = sheet.getRange(lastRow + 1, exportColIndex, data.length, 1);
-      newRowsRange.setFontColor('#1967D2'); // Xanh dương đậm
-      newRowsRange.setFontWeight('bold');
-    }
-  }
-
-  // ── Batch cuối cùng → format final ──
-  var totalBatches = payload.totalBatches || 1;
-  if (batchIndex === totalBatches - 1) {
-    formatFinal(sheet, headers, data);
-  }
-
-  return jsonResponse({
-    success: true,
-    sheetName: sheetName,
-    isAppend: !isNewSheet,
-    rowsWritten: data ? data.length : 0,
-    totalRows: sheet.getLastRow() - 1,
-    spreadsheetUrl: ss.getUrl() + '#gid=' + sheet.getSheetId(),
-    batchIndex: batchIndex
+  var name = String(payload.productName).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '') || 'Khac';
+  name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  var base = payload.year + '-' + payload.month + '_' + name.slice(0, 60);
+  var tabName = base;
+  // Different products with the same display name retain separate destinations.
+  if (ss.getSheetByName(tabName)) tabName = base + '_' + digest.slice(0, 12);
+  if (ss.getSheetByName(tabName)) throw new Error('Unregistered tab name collision');
+  var tab = ss.insertSheet(tabName);
+  cfg.props.setProperty(key, tabName);
+  return tab;
+}
+function handleExport(payload, cfg) {
+  if (!Number.isInteger(payload.year) || payload.year < 1900 || payload.year > 9999 ||
+      !/^(0[1-9]|1[0-2])$/.test(payload.month) || typeof payload.productKey !== 'string' || !payload.productKey ||
+      typeof payload.productName !== 'string' || !payload.productName ||
+      !Array.isArray(payload.headers) || payload.headers.length !== 16 || payload.headers[0] !== 'Tên (bắt buộc)' ||
+      !Array.isArray(payload.data) || !payload.data.length || payload.data.length > 5000 ||
+      !Array.isArray(payload.rowKeys) || payload.rowKeys.length !== payload.data.length) throw new Error('Invalid export payload');
+  payload.data.forEach(function(row) {
+    if (!Array.isArray(row) || row.length !== 16) throw new Error('Expected 16 data columns');
   });
-}
-
-/**
- * Tô màu cells theo trạng thái
- */
-function colorStatusCells(sheet, startRow, data, statusColIndex) {
-  var statusCol = statusColIndex + 1; // 0-based → 1-based
-
-  for (var r = 0; r < data.length; r++) {
-    var status = String(data[r][statusColIndex]);
-    var statusUpper = status.toUpperCase();
-    var cell = sheet.getRange(startRow + r, statusCol);
-    cell.setFontWeight('bold');
-
-    // Match cả giá trị DB (SUCCESS/FAILED/PENDING/TIMEOUT) lẫn tiếng Việt
-    if (statusUpper === 'SUCCESS' || status === 'Thành công') {
-      cell.setFontColor('#188038');
-      cell.setBackground('#E6F4EA');
-    } else if (statusUpper === 'FAILED' || status === 'Lỗi') {
-      cell.setFontColor('#C5221F');
-      cell.setBackground('#FCE8E6');
-    } else if (statusUpper === 'PENDING' || status === 'Chờ đồng bộ') {
-      cell.setFontColor('#E37400');
-      cell.setBackground('#FEF7E0');
-    } else if (statusUpper === 'TIMEOUT' || status === 'Hết thời gian') {
-      cell.setFontColor('#9334E6');
-      cell.setBackground('#F3E8FD');
+  if (payload.rowKeys.some(function(key) { return typeof key !== 'string' || !key; }) ||
+      new Set(payload.rowKeys).size !== payload.rowKeys.length) throw new Error('Invalid row keys');
+  var ss = annualSpreadsheet(payload.year, cfg);
+  var sheet = productTab(ss, payload, cfg);
+  var headers = payload.headers.concat([EXPORT_KEY_HEADER]);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, 17).setValues([headers]);
+    sheet.getRange(1, 1, 1, 17).setFontWeight('bold').setBackground('#334488').setFontColor('#FFFFFF');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 180); sheet.setColumnWidth(2, 150);
+    sheet.setColumnWidth(9, 300); sheet.setColumnWidth(14, 300); sheet.setColumnWidth(16, 400);
+    sheet.hideColumns(17);
+  } else {
+    var actual = sheet.getRange(1, 1, 1, 17).getValues()[0];
+    if (JSON.stringify(actual) !== JSON.stringify(headers)) throw new Error('Header mismatch; do not append to an old layout');
+  }
+  var last = sheet.getLastRow();
+  var known = new Set(last > 1 ? sheet.getRange(2, 17, last - 1, 1).getValues().map(function(row) { return String(row[0]); }) : []);
+  var pending = [];
+  for (var i = 0; i < payload.data.length; i++) {
+    if (!known.has(payload.rowKeys[i])) {
+      // Never overwrite customer name with a sequence number. Column A is the original name.
+      pending.push(payload.data[i].concat([payload.rowKeys[i]]));
     }
   }
-}
-
-/**
- * Format cuối cùng: column widths, number format, borders
- */
-function formatFinal(sheet, headers, data) {
-  var numCols = headers ? headers.length : (data && data.length > 0 ? data[0].length : 1);
-
-  // Column widths (13 cột A-M)
-  var colWidths = {
-    1: 160,   // A: Tên
-    2: 130,   // B: SĐT
-    3: 180,   // C: E-mail
-    4: 100,   // D: Đăng ký email
-    5: 160,   // E: Ngày đặt hàng
-    6: 140,   // F: ExternalId đơn hàng
-    7: 130,   // G: Trạng thái đơn hàng
-    8: 200,   // H: Tên sản phẩm
-    9: 80,    // I: Số lượng
-    10: 120,  // J: Giá bán
-    11: 250,  // K: Địa chỉ giao hàng
-    12: 130,  // L: Trạng thái thanh toán
-    13: 250,  // M: Ghi chú
-  };
-
-  for (var col in colWidths) {
-    if (parseInt(col) <= numCols) {
-      sheet.setColumnWidth(parseInt(col), colWidths[col]);
-    }
+  if (pending.length) {
+    var start = last + 1;
+    var end = start + pending.length - 1;
+    if (end > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), end - sheet.getMaxRows());
+    // Text columns preserve leading zeros, +phone, external IDs, and customer input.
+    sheet.getRange(start, 1, pending.length, 17).setNumberFormat('@');
+    sheet.getRange(start, 10, pending.length, 4).setNumberFormat('#,##0.##');
+    // Prevent spreadsheet formula evaluation for untrusted customer text.
+    var safe = pending.map(function(row) { return row.map(function(value) {
+      return typeof value === 'string' && /^[=+@-]/.test(value) ? "'" + value : value;
+    }); });
+    var range = sheet.getRange(start, 1, pending.length, 17);
+    range.setValues(safe);
+    range.setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   }
-
-  // Format cột Tổng tiền dạng số
-  if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 6, sheet.getLastRow() - 1, 1).setNumberFormat('#,##0');
-  }
-
-  // Zebra stripes
-  if (sheet.getLastRow() > 1) {
-    for (var row = 2; row <= sheet.getLastRow(); row++) {
-      if (row % 2 === 0) {
-        // Chỉ set background nếu cell chưa có background đặc biệt (status)
-        var existingBg = sheet.getRange(row, 1).getBackground();
-        if (existingBg === '#ffffff' || existingBg === null) {
-          sheet.getRange(row, 1, 1, numCols).setBackground('#F8F9FA');
-        }
-      }
-    }
-  }
-
-  // Borders
-  sheet.getRange(1, 1, sheet.getLastRow(), numCols)
-    .setBorder(true, true, true, true, true, true, '#DADCE0', SpreadsheetApp.BorderStyle.SOLID);
-
-  Logger.log('Final format done. Total rows: ' + (sheet.getLastRow() - 1));
+  SpreadsheetApp.flush();
+  return { success: true, protocolVersion: 2, year: payload.year, month: payload.month,
+    productKey: payload.productKey, sheetName: sheet.getName(), acceptedRows: payload.data.length,
+    rowsWritten: pending.length, duplicateRows: payload.data.length - pending.length,
+    spreadsheetUrl: ss.getUrl() + '#gid=' + sheet.getSheetId() };
 }
-
-/**
- * JSON response helper
- */
-function jsonResponse(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-/**
- * GET handler (test URL trong browser)
- */
-function doGet() {
-  return jsonResponse({
-    status: 'ok',
-    message: 'Lead Admin Sheets Export — Apps Script is running',
-    time: new Date().toISOString()
-  });
-}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script entry point
+function doGet() { return jsonResponse({ status: 'ok', protocolVersion: 2, message: 'Lead Admin annual export' }); }
