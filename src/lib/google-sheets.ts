@@ -10,6 +10,7 @@ export interface OrderForExport {
   id: number; external_id: string; customer_name: string; customer_phone: string;
   delivery_address: string; total_price: string | number;
   selected_package: string | null; selected_size: string | null;
+  url_page?: string | null;
   landing_slug: string | null; sync_status: string; retailcrm_id: number | null;
   items_json?: string; created_at: Date | string;
 }
@@ -17,7 +18,7 @@ export const SHEET_HEADERS = [
   'Tên (bắt buộc)', 'Số điện thoại', 'E-mail', 'Đăng ký nhận email (có/không)',
   'Ngày đặt hàng', 'ExternalId đơn hàng', 'Loại đơn hàng', 'Trạng thái đơn hàng',
   'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Phí vận chuyển', 'Tổng tiền',
-  'Địa chỉ giao hàng', 'Trạng thái thanh toán', 'Ghi chú đơn hàng',
+  'Địa chỉ giao hàng', 'Trạng thái thanh toán', 'Ghi chú đơn hàng', 'URL Landing Page',
 ];
 type Cell = string | number;
 interface Item {
@@ -71,6 +72,7 @@ export function groupSheetOrders(orders: OrderForExport[], timeZone = process.en
         item.promotion ? 'Khuyến mại: ' + item.promotion : '',
         item.size || order.selected_size ? 'Size: ' + (item.size || order.selected_size) : '',
       ].filter(Boolean).join(' | '),
+      order.url_page || '',
     ]);
     group.orders.push({ id: order.id, rows, rowKeys: items.map((_, index) =>
       (process.env.GOOGLE_SHEETS_SOURCE || 'lead-admin') + ':' + order.external_id + ':' + order.id + ':' + index) });

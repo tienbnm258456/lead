@@ -141,6 +141,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
         items_json: JSON.stringify(items.map((item, index) => index === 0 ? { ...item, rawPayload: body } : item)),
         total_price: totalPrice,
         source: 'ladipage-test',
+        url_page: scalar(body.url_page) || null,
         landing_slug: product.slug,
         group_id: landingPage.group_id,
         landing_page_id: landingPage.id,

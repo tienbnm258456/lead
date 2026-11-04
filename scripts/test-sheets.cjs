@@ -13,7 +13,7 @@ function loadExporter(fetch) {
 function order(id, date = '2026-11-15T00:00:00Z', productName = 'Đai lưng', slug = 'dai-lung') {
   return { id, external_id: 'SAMPLE-' + id, customer_name: 'Nguyễn Văn A', customer_phone: '0977700000', delivery_address: 'Địa chỉ thử nghiệm',
     created_at: date, total_price: 878000, selected_package: '1+1 | 2+2', selected_size: 'S | L', landing_slug: slug,
-    sync_status: 'SUCCESS', retailcrm_id: null,
+    sync_status: 'SUCCESS', retailcrm_id: null, url_page: 'https://example.test/vc-cream.store',
     items_json: JSON.stringify([{ productName, variantLabel: 'Gói 1+1', quantity: 1, initialPrice: 299000, deliveryFee: 50000 },
       { productName, variantLabel: 'Gói 2+2', quantity: 1, initialPrice: 529000, deliveryFee: 0 }]) };
 }
@@ -37,6 +37,8 @@ function mockGoogle() {
     getRange(...args) { return new Range(this, ...args); }
     getName() { return this.name; } getSheetId() { return this.id; } getLastRow() { return this.rows.length; }
     getMaxRows() { return this.maxRows; } insertRowsAfter(_, n) { this.maxRows += n; }
+    insertColumnBefore(c) { this.rows.forEach(row => row.splice(c - 1, 0, "")); }
+    showColumns() {}
     setRowHeight() {} setFrozenRows() {} setColumnWidth() {} hideColumns() {}
   }
   const context = {
@@ -82,8 +84,9 @@ test('backend + real Apps Script: preserve names, create yearly files, route pro
   assert.deepEqual(result.destinations.map(d => d.sheetName), ['2026-11_Dai-lung', '2026-12_Kem', '2027-01_Dai-lung']);
   const first = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
   assert.equal(first.rows[1][0], 'Nguyễn Văn A'); assert.equal(first.rows[1][1], '0977700000');
+  assert.equal(first.rows[1][16], 'https://example.test/vc-cream.store');
   assert.equal(first.rows[1][12], 878000); assert.equal(first.rows[2][12], 0);
-  assert.equal(first.rows[0][16], '_ExportRowId');
+  assert.equal(first.rows[0][17], '_ExportRowId');
   assert.equal((await exporter.exportOrdersToGoogleSheets(data)).success, true);
   assert.equal(first.rows.length, 3); assert.equal(google.files.size, 2); assert.equal(google.locks(), 0);
 });
@@ -145,4 +148,21 @@ test('status colors apply to new rows and repair existing archives without chang
   assert.equal(JSON.stringify(sheet.rows), before);
   assert.ok(sheet.styles.some(style => style.c === 8 && style.colors));
   assert.equal(google.locks(), 0);
+});
+
+
+test('old sheet upgrades URL column while preserving dedup keys and existing rows', async () => {
+  settings(); const google = mockGoogle();
+  const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
+  await exporter.exportOrdersToGoogleSheets([order(1)]);
+  const sheet = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
+  sheet.rows.forEach(row => row.splice(16, 1)); // Simulate the original 16-column layout.
+  const oldKey = sheet.rows[1][16];
+  const result = await exporter.exportOrdersToGoogleSheets([order(1), order(2)]);
+  assert.equal(result.success, true);
+  assert.equal(sheet.rows.length, 5);
+  assert.equal(sheet.rows[0][16], 'URL Landing Page');
+  assert.equal(sheet.rows[1][17], oldKey);
+  assert.equal(sheet.rows[1][16], '');
+  assert.equal(sheet.rows[3][16], 'https://example.test/vc-cream.store');
 });

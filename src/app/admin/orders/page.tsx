@@ -24,6 +24,7 @@ interface Order extends OrderDetailData {
   selected_package: string | null;
   selected_size: string | null;
   sync_status: string;
+  url_page: string | null;
   landing_slug: string | null;
   exported_at: string | null;
   created_at: string;
@@ -133,7 +134,7 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -231,14 +232,14 @@ export default function OrdersPage() {
   const closeForm = () => {
     setShowForm(false);
     setEditOrder(null);
-    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
     setSelectedLPId(null);
     setSelectedVariantId(null);
   };
 
   const openCreateForm = async () => {
     setEditOrder(null);
-    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -257,7 +258,7 @@ export default function OrdersPage() {
   const openEditForm = (o: Order) => {
     if (!canEditOrders) return;
     setEditOrder(o);
-    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
+    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, url_page: o.url_page || '', total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -372,7 +373,8 @@ export default function OrdersPage() {
     { key: 'total_price', label: 'Tổng tiền' },
     { key: 'selected_package', label: 'Gói SP', noSort: true },
     { key: 'selected_size', label: 'Tùy chọn', noSort: true },
-    { key: 'sync_status', label: 'Trạng thái' },
+    { key: 'url_page', label: 'URL Landing Page', noSort: true },
+    { key: 'sync_status', label: 'TRẠNG THÁI ĐỒNG BỘ RetailCRM' },
     { key: 'created_at', label: 'Ngày tạo' },
     { key: 'actions', label: '', noSort: true },
   ];
@@ -750,6 +752,9 @@ export default function OrdersPage() {
                         <span className="text-sm" style={{ color: 'var(--disabled)' }}>—</span>
                       )}
                     </td>
+                    <td className="px-4 py-3.5 text-sm">
+                      <span className="block max-w-64 truncate select-text" title={order.url_page || undefined}>{order.url_page || '—'}</span>
+                    </td>
                     {/* Status — soft bordered badge */}
                     <td className="px-4 py-3.5">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusConfig[order.sync_status]?.classes || 'bg-gray-100 text-gray-700'}`}>
@@ -900,6 +905,13 @@ export default function OrdersPage() {
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   placeholder="Địa chỉ giao hàng" value={formData.delivery_address} onChange={e => setFormData(p => ({ ...p, delivery_address: e.target.value }))} />
               </div>
+
+              {!editOrder && <div>
+                <label htmlFor="order-url-page" className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>URL Landing Page <span className="text-xs font-normal">(không bắt buộc)</span></label>
+                <input id="order-url-page" type="url" className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                  placeholder="https://example.com/landing-page" value={formData.url_page} onChange={e => setFormData(p => ({ ...p, url_page: e.target.value }))} />
+              </div>}
 
               {/* ── Product Cascade (only for new orders) ── */}
               {!editOrder && (

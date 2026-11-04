@@ -67,9 +67,10 @@ test('webhook sends multiple sizes and holds only an unknown package', async () 
       '@/lib/order-id': { generateExternalId: () => 'GF-10001' },
     });
     const body = { name: 'Ali', phone: '123', address: 'Bukhara', products: ambiguous ? ['Unknown package'] : variants.map(v => v.label), size: ['S', 'L'] };
-    const response = await route.POST({ headers: new Headers({ 'content-type': 'application/json' }), nextUrl: new URL('http://localhost/api/webhook/ladipage?api_key=test'), json: async () => body });
+    const response = await route.POST({ headers: new Headers({ 'content-type': 'application/json' }), nextUrl: new URL('http://localhost/api/webhook/ladipage?api_key=test'), json: async () => ({ ...body, url_page: "https://example.test/vc-cream.store" }) });
     assert.equal(response.status, 200);
-    assert.deepEqual(JSON.parse(saved.items_json)[0].rawPayload, body);
+    assert.equal(saved.url_page, "https://example.test/vc-cream.store");
+    assert.deepEqual(JSON.parse(saved.items_json)[0].rawPayload, { ...body, url_page: "https://example.test/vc-cream.store" });
     if (ambiguous) { assert.equal(sent, undefined); assert.equal(saved.sync_status, 'FAILED'); assert.equal(response.body.requiresReview, true); }
     else { assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
   }

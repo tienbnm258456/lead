@@ -145,6 +145,15 @@ export async function POST(request: Request) {
     const customer_name = scalar(body.customer_name);
     const customer_phone = scalar(body.customer_phone);
     const delivery_address = scalar(body.delivery_address);
+    const url_page = scalar(body.url_page);
+    if (url_page) {
+      try {
+        const url = new URL(url_page);
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+      } catch {
+        return NextResponse.json({ error: 'URL Landing Page không hợp lệ. Vui lòng nhập URL http:// hoặc https://' }, { status: 400 });
+      }
+    }
 
     if (!customer_name || !customer_phone || !delivery_address) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
@@ -178,6 +187,7 @@ export async function POST(request: Request) {
         customer_name,
         customer_phone,
         delivery_address,
+        url_page: url_page || null,
         items_json: JSON.stringify(resolved.items),
         total_price: resolved.totalPrice,
         source: 'admin',

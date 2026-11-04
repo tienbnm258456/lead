@@ -74,34 +74,46 @@ function productTab(ss, payload, cfg) {
   cfg.props.setProperty(key, tabName);
   return tab;
 }
+/** Upgrade the old layout without losing row keys or existing values. */
+function upgradeUrlColumn(sheet) {
+  if (!sheet.getLastRow()) return;
+  var header = sheet.getRange(1, 1, 1, 18).getValues()[0];
+  if (header[0] === 'Tên (bắt buộc)' && header[7] === 'Trạng thái đơn hàng' && header[16] === EXPORT_KEY_HEADER) {
+    sheet.insertColumnBefore(17);
+    sheet.getRange(1, 17, 1, 1).setValues([['URL Landing Page']]);
+    sheet.showColumns(17);
+    sheet.hideColumns(18);
+  }
+}
 function handleExport(payload, cfg) {
   if (!Number.isInteger(payload.year) || payload.year < 1900 || payload.year > 9999 ||
       !/^(0[1-9]|1[0-2])$/.test(payload.month) || typeof payload.productKey !== 'string' || !payload.productKey ||
       typeof payload.productName !== 'string' || !payload.productName ||
-      !Array.isArray(payload.headers) || payload.headers.length !== 16 || payload.headers[0] !== 'Tên (bắt buộc)' ||
+      !Array.isArray(payload.headers) || payload.headers.length !== 17 || payload.headers[0] !== 'Tên (bắt buộc)' ||
       !Array.isArray(payload.data) || !payload.data.length || payload.data.length > 5000 ||
       !Array.isArray(payload.rowKeys) || payload.rowKeys.length !== payload.data.length) throw new Error('Invalid export payload');
   payload.data.forEach(function(row) {
-    if (!Array.isArray(row) || row.length !== 16) throw new Error('Expected 16 data columns');
+    if (!Array.isArray(row) || row.length !== 17) throw new Error('Expected 17 data columns');
   });
   if (payload.rowKeys.some(function(key) { return typeof key !== 'string' || !key; }) ||
       new Set(payload.rowKeys).size !== payload.rowKeys.length) throw new Error('Invalid row keys');
   var ss = annualSpreadsheet(payload.year, cfg);
   var sheet = productTab(ss, payload, cfg);
+  upgradeUrlColumn(sheet);
   var headers = payload.headers.concat([EXPORT_KEY_HEADER]);
   if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, 17).setValues([headers]);
-    sheet.getRange(1, 1, 1, 17).setFontWeight('bold').setBackground('#334488').setFontColor('#FFFFFF');
+    sheet.getRange(1, 1, 1, 18).setValues([headers]);
+    sheet.getRange(1, 1, 1, 18).setFontWeight('bold').setBackground('#334488').setFontColor('#FFFFFF');
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(1, 180); sheet.setColumnWidth(2, 150);
     sheet.setColumnWidth(9, 300); sheet.setColumnWidth(14, 300); sheet.setColumnWidth(16, 400);
-    sheet.hideColumns(17);
+    sheet.hideColumns(18);
   } else {
-    var actual = sheet.getRange(1, 1, 1, 17).getValues()[0];
+    var actual = sheet.getRange(1, 1, 1, 18).getValues()[0];
     if (JSON.stringify(actual) !== JSON.stringify(headers)) throw new Error('Header mismatch; do not append to an old layout');
   }
   var last = sheet.getLastRow();
-  var known = new Set(last > 1 ? sheet.getRange(2, 17, last - 1, 1).getValues().map(function(row) { return String(row[0]); }) : []);
+  var known = new Set(last > 1 ? sheet.getRange(2, 18, last - 1, 1).getValues().map(function(row) { return String(row[0]); }) : []);
   var pending = [];
   for (var i = 0; i < payload.data.length; i++) {
     if (!known.has(payload.rowKeys[i])) {
@@ -114,13 +126,13 @@ function handleExport(payload, cfg) {
     var end = start + pending.length - 1;
     if (end > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), end - sheet.getMaxRows());
     // Text columns preserve leading zeros, +phone, external IDs, and customer input.
-    sheet.getRange(start, 1, pending.length, 17).setNumberFormat('@');
+    sheet.getRange(start, 1, pending.length, 18).setNumberFormat('@');
     sheet.getRange(start, 10, pending.length, 4).setNumberFormat('#,##0.##');
     // Prevent spreadsheet formula evaluation for untrusted customer text.
     var safe = pending.map(function(row) { return row.map(function(value) {
       return typeof value === 'string' && /^[=+@-]/.test(value) ? "'" + value : value;
     }); });
-    var range = sheet.getRange(start, 1, pending.length, 17);
+    var range = sheet.getRange(start, 1, pending.length, 18);
     range.setValues(safe);
     range.setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   }
@@ -134,7 +146,7 @@ function handleExport(payload, cfg) {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Google Apps Script entry point
 function doGet() { return jsonResponse({ status: 'ok', protocolVersion: 2, message: 'Lead Admin annual export' }); }
 
-/** Bulk formatting: status is column H in the current 16-column layout. */
+/** Bulk formatting: status is column H in the current 17-column layout. */
 function statusStyle(value) {
   var key = String(value || '').trim().toUpperCase();
   if (key === 'SUCCESS' || key === 'THÀNH CÔNG') return { background: '#E6F4EA', color: '#188038' };
@@ -144,20 +156,20 @@ function statusStyle(value) {
   return { background: '#FFFFFF', color: '#202124' };
 }
 function formatExportSheet(sheet, startRow, count) {
-  sheet.getRange(1, 1, 1, 16).setFontWeight('bold').setFontSize(10)
+  sheet.getRange(1, 1, 1, 17).setFontWeight('bold').setFontSize(10)
     .setBackground('#334488').setFontColor('#FFFFFF').setHorizontalAlignment('center')
     .setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   sheet.setFrozenRows(1);
   sheet.setRowHeight(1, 56);
-  var widths = [180, 155, 180, 125, 170, 170, 180, 160, 360, 110, 150, 150, 170, 320, 170, 420];
+  var widths = [180, 155, 180, 125, 170, 170, 180, 160, 360, 110, 150, 150, 170, 320, 170, 420, 420];
   widths.forEach(function(width, index) { sheet.setColumnWidth(index + 1, width); });
-  sheet.hideColumns(17);
+  sheet.hideColumns(18);
   if (!count) return;
-  var range = sheet.getRange(startRow, 1, count, 16);
+  var range = sheet.getRange(startRow, 1, count, 17);
   range.setFontSize(10).setFontWeight('normal').setFontColor('#202124')
     .setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP)
     .setBackgrounds(Array.from({ length: count }, function(_, i) {
-      return Array(16).fill((startRow + i) % 2 === 0 ? '#F8F9FA' : '#FFFFFF');
+      return Array(17).fill((startRow + i) % 2 === 0 ? '#F8F9FA' : '#FFFFFF');
     })).setBorder(true, true, true, true, true, true, '#DADCE0', SpreadsheetApp.BorderStyle.SOLID);
   sheet.getRange(startRow, 10, count, 4).setNumberFormat('#,##0.##').setHorizontalAlignment('right');
   var status = sheet.getRange(startRow, 8, count, 1);
@@ -177,8 +189,9 @@ function reformatAllYearFiles() {
       var ss = SpreadsheetApp.openById(props[key]);
       ss.getSheets().forEach(function(sheet) {
         if (!sheet.getLastRow()) return;
-        var header = sheet.getRange(1, 1, 1, 17).getValues()[0];
-        if (header[0] !== 'Tên (bắt buộc)' || header[7] !== 'Trạng thái đơn hàng' || header[16] !== EXPORT_KEY_HEADER) return;
+        upgradeUrlColumn(sheet);
+        var header = sheet.getRange(1, 1, 1, 18).getValues()[0];
+        if (header[0] !== 'Tên (bắt buộc)' || header[7] !== 'Trạng thái đơn hàng' || header[17] !== EXPORT_KEY_HEADER) return;
         formatExportSheet(sheet, 2, sheet.getLastRow() - 1);
         Logger.log('Formatted: ' + sheet.getName());
       });

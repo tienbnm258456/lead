@@ -199,3 +199,10 @@ Nếu test xong cần xóa file mẫu, dùng project/thư mục test riêng; kh�
 ## Khôi phục format cho file đã xuất
 
 Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong editor và bấm Run một lần. Hàm áp dụng format cho các tab archive đã đăng ký: header xanh/căn giữa/xuống dòng, độ rộng 16 cột, kẻ bảng/nền xen kẽ, trạng thái cột H màu xanh (thành công), đỏ (lỗi), cam (chờ), tím (timeout). Không sửa giá trị, không xuất lại và không thêm dòng. Sau đó Deploy → Manage deployments → Edit → New version → Deploy để các lần xuất tiếp theo tự có format.
+
+## Bổ sung URL Landing Page (04/11/2026)
+
+- Cập nhật toàn bộ mã từ src/lib/google-apps-script.js vào Apps Script, lưu và Deploy → Manage deployments → Edit → New version → Deploy. Giữ URL Web App hiện tại.
+- Cột Q là URL Landing Page; khóa chống trùng chuyển sang cột R (ẩn). Tab cũ tự thêm cột khi nhận lần xuất tiếp theo, giữ dữ liệu và khóa cũ. Có thể chạy reformatAllYearFiles để nâng cấp tất cả tab đã đăng ký.
+- Đơn mới lấy URL từ trường url_page trong webhook. Đơn cũ không có dữ liệu này sẽ để trống; không suy đoán từ địa chỉ landing page cấu hình.
+- Code/database: chạy npx prisma migrate deploy, npx prisma generate, npm run build rồi restart PM2. Cần hoàn tất baseline migration cũ nếu database chưa có lịch sử migration.

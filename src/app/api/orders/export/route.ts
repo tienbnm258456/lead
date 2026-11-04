@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
       { header: 'Địa chỉ giao hàng', key: 'deliveryAddr', width: 35 },
       { header: 'Trạng thái thanh toán', key: 'paymentStatus', width: 16 },
       { header: 'Ghi chú đơn hàng', key: 'comment', width: 35 },
+      { header: 'URL Landing Page', key: 'urlPage', width: 55 },
     ];
 
     const styleHeader = (ws: ExcelJS.Worksheet) => {
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
       headerRow.height = 32;
 
       // Auto-filter (A1 → P1 = 16 cột)
-      ws.autoFilter = { from: 'A1', to: 'P1' };
+      ws.autoFilter = { from: 'A1', to: 'Q1' };
 
       // Freeze header row
       ws.views = [{ state: 'frozen', ySplit: 1 }];
@@ -156,6 +157,7 @@ export async function GET(request: NextRequest) {
         deliveryAddr: order.delivery_address,
         paymentStatus: 'Chưa thanh toán',
         comment: commentParts.join(', '),
+        urlPage: order.url_page || '',
       });
 
       // Style alternate rows

@@ -164,6 +164,7 @@ model Order {
 
   // ── Nguồn đơn hàng ──
   source           String  @default("ladipage") @db.VarChar(100) /// Nguồn: "ladipage" (thật), "ladipage-test" (test), "api", "admin"
+  url_page         String? @db.Text                         /// URL trang gửi đơn từ LadiPage
   landing_slug     String? @db.VarChar(100)                      /// Slug của product (để lọc đơn theo sản phẩm/trang)
   selected_package String? @db.Text                         /// Text gói đã chọn (nguyên bản từ LadiPage, có thể chứa nhiều gói)
   selected_size    String? @db.VarChar(500)                  /// Tùy chọn phụ đã chọn: size, kg... (có thể chứa nhiều size)

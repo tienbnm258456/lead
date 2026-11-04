@@ -1,3 +1,4 @@
+import { scalar } from '@/lib/ladipage-order';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -206,6 +207,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }]),
         total_price: totalPrice,
         source: 'ladipage',
+        url_page: scalar(body.url_page) || null,
         landing_slug: slug,
         selected_package: packageOption || matchedVariant.label,
         selected_size: sizeOption || matchedVariant.size || null,
