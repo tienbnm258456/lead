@@ -18,8 +18,9 @@ export async function proxy(request: NextRequest) {
 
   if (isApiRoute) {
     // Log API requests với query params (hữu ích cho debug)
+    const safePath = pathname.replace(/^(\/api\/webhook\/retailcrm\/)[^/]+/, '$1[REDACTED]');
     const query = request.nextUrl.search || '';
-    console.log(`📡 ${method} ${pathname}${query} ${userTag} (${duration}ms)`);
+    console.log(`📡 ${method} ${safePath}${query} ${userTag} (${duration}ms)`);
   } else {
     console.log(`🌐 ${method} ${pathname} ${userTag} (${duration}ms)`);
   }

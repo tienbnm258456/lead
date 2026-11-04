@@ -79,6 +79,9 @@ export function register() {
       schedule();
     }
   }
+  if (process.env.RETAILCRM_WEBHOOK_SECRET && process.env.CRON_SECRET) {
+    install('RetailCRM Status', '/api/cron/retailcrm-status', 0.25, 0, 5000);
+  }
   const cleanupHour = Number(process.env.CLEANUP_CRON_HOUR ?? '23');
   install('Cleanup', '/api/cron/cleanup', minutes(process.env.CLEANUP_INTERVAL_MINUTES),
     Number.isInteger(cleanupHour) && cleanupHour >= 0 && cleanupHour <= 23 ? cleanupHour : 23, 10000);

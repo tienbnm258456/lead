@@ -173,6 +173,9 @@ model Order {
   sync_status  OrderSyncStatus @default(PENDING)  /// Trạng thái sync: PENDING → SUCCESS / FAILED / TIMEOUT
   sync_message String?         @db.Text            /// Thông báo sync (VD: "Synced (RetailCRM ID: 123)" hoặc lỗi)
   retailcrm_id Int?                                /// ID đơn hàng trên RetailCRM (sau khi sync thành công)
+  crm_status String? @db.VarChar(255)
+  crm_status_updated_at DateTime?
+  crm_status_checked_at DateTime?
   synced_at    DateTime?                           /// Thời điểm sync thành công
 
   // ── Quản lý dữ liệu ──
@@ -319,4 +322,20 @@ model AccessGroup {
   products Product[]
   pages LandingPage[]
   orders Order[]
+}
+
+/// Durable RetailCRM trigger inbox; deliberately survives deletion/export of orders.
+model RetailCrmEvent {
+  event_id String @id @db.VarChar(500)
+  order_id String @db.VarChar(100)
+  external_id String @db.VarChar(100)
+  status String @db.VarChar(255)
+  status_updated_at DateTime
+  attempts Int @default(0)
+  next_attempt_at DateTime @default(now())
+  processed_at DateTime?
+  error String? @db.Text
+  received_at DateTime @default(now())
+  @@index([processed_at, next_attempt_at])
+  @@map("retailcrm_events")
 }
