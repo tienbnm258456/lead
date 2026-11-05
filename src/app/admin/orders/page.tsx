@@ -9,6 +9,7 @@ import {
   ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { CrmStatusBadge } from '@/components/crm-status-badge';
 import { queryScope } from '@/lib/query-scope';
 import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
 
@@ -764,18 +765,7 @@ export default function OrdersPage() {
                       </span>
                     </td>
                     <td className="min-w-[200px] px-4 py-3.5 text-sm">
-                      {order.crm_status ? (
-                        <span className="inline-flex max-w-64 items-center truncate whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium select-text"
-                          style={{ borderColor: 'var(--border)', color: 'var(--card-foreground)' }} title={order.crm_status}>
-                          <span className="truncate">{order.crm_status}</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium"
-                          style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.22)', color: '#d99416' }}>
-                          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-                          Chờ xác nhận
-                        </span>
-                      )}
+                      <CrmStatusBadge code={order.crm_status} />
                     </td>
                     {/* Created at */}
                     <td className="px-4 py-3.5 text-sm tabular-nums whitespace-nowrap" style={{ color: 'var(--card-foreground)' }}>

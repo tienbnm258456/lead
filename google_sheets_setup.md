@@ -173,7 +173,7 @@ Nếu test xong cần xóa file mẫu, dùng project/thư mục test riêng; kh�
 - Script cũ chưa cập nhật sẽ không được backend coi là xuất thành công. Cần cập nhật Google trước khi bật lại job code mới.
 - Dòng trùng được nhận biết bằng cột Q. Gửi lại là bỏ qua dòng đã có, không cập nhật sửa đổi của đơn cũ. Không di chuyển/sửa các dòng đã xuất nếu còn cần retry.
 - Đổi năm chỉ tạo file khi có dữ liệu của năm đó. Đơn năm cũ xuất muộn vẫn về file năm cũ.
-- Lịch tháng và cơ chế xóa đơn sau khi xuất thành công của API cron vẫn giữ nguyên. Chạy API cron thật có thể xóa đơn và log CRM khỏi database. SHEETS_EXPORT_INTERVAL_MINUTES là chế độ quét thật, không phải dry-run.
+- Lịch tháng giữ nguyên. Sau khi xuất thành công, API cron chỉ đánh dấu sheets_exported_at và ghi log EXPORT; không xóa đơn hoặc sync log sau xuất. SHEETS_EXPORT_INTERVAL_MINUTES là chế độ xuất thật, không phải dry-run. Job cleanup riêng vẫn dọn log quá hạn theo cấu hình; thao tác xóa thủ công không thay đổi.
 - Các vấn đề lịch tháng đã phân tích (dấu tháng nằm trong đơn bị xóa; batch lỗi có thể bị điều kiện đã xuất tháng này chặn) chưa được thiết kế lại trong thay đổi này.
 - Google Drive dung lượng/quota vẫn áp dụng. Quá quota/mất quyền sẽ báo lỗi và không đánh dấu batch đó thành công.
 - Chưa tự chuyển bản xuất cũ hay sửa tên đã mất. Cần đối chiếu backup/dữ liệu nguồn nếu muốn phục hồi.

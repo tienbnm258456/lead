@@ -63,7 +63,7 @@ const rollback = new Error('rollback fixtures');
     assert.equal((await tx.product.findUnique({ where: { id: a.product.id } })).xml_id, 'UPDATED_PARTNER_BASE');
     assert.equal(JSON.parse((await tx.order.findUnique({ where: { id: original.id } })).items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21');
     const pageCreate = load('src/app/api/landing-pages/route.ts', mocks);
-    const newPage = await pageCreate.POST(request({ name: tag + ' spoof', xml_id: 'PARTNER_BASE', group_id: groupB.id, variants: [{ label: 'New', price: 100000 }] }));
+    const newPage = await pageCreate.POST(request({ name: tag + ' spoof', xml_id: 'PARTNER_BASE', group_id: groupB.id, variants: [{ label: 'New', price: 100000, promotion: '1+1' }] }));
     assert.equal(newPage.status, 201); assert.equal((await newPage.clone().json()).product.xml_id, 'PARTNER_BASE'); assert.equal((await newPage.json()).group_id, groupA.id);
     const newPageId = (await tx.landingPage.findFirst({ where: { name: tag + ' spoof' } })).id;
     const movedOrder = await tx.order.create({ data: { external_id: tag + '_move', customer_name: 'Move', customer_phone: '000', delivery_address: 'Test', total_price: 100000, items_json: '[]', group_id: groupA.id, landing_page_id: newPageId } });

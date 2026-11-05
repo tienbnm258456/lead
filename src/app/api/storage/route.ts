@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+import { purgeEligibility, retentionDays, TERMINAL_CRM_STATUSES } from '@/lib/order-retention';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSettings, toMs } from '@/lib/settings-cache';
@@ -8,11 +10,14 @@ import { requireAdmin } from '@/lib/require-auth';
  * Thống kê dung lượng database thực tế + breakdown per-table
  * + thống kê exported/unexported + lịch sử activity
  */
-export async function GET() {
+export async function GET(request?: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
   try {
+    const days = retentionDays(request ? new URL(request.url).searchParams.get('retentionDays') : undefined);
+    const cutoff = new Date(Date.now() - days * 86400000);
+    const [eligible] = await prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM orders o WHERE ${purgeEligibility(cutoff)}`;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -24,8 +29,8 @@ export async function GET() {
       totalActivityLogs,
     ] = await Promise.all([
       prisma.order.count(),
-      prisma.order.count({ where: { exported_at: { not: null } } }),
-      prisma.order.count({ where: { exported_at: null } }),
+      prisma.order.count({ where: { OR: [{ exported_at: { not: null } }, { sheets_exported_at: { not: null } }] } }),
+      prisma.order.count({ where: { exported_at: null, sheets_exported_at: null } }),
       prisma.orderSyncLog.count(),
       prisma.activityLog.count(),
     ]);
@@ -99,6 +104,9 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
+        purgeableOrders: Number(eligible.count),
+        retentionDays: days,
+        terminalStatuses: TERMINAL_CRM_STATUSES,
         totalOrders,
         exportedOrders,
         unexportedOrders,
@@ -123,6 +131,7 @@ export async function GET() {
       },
     });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Thời hạn')) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error fetching storage stats:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
@@ -130,7 +139,7 @@ export async function GET() {
 
 /**
  * DELETE /api/storage
- * Xóa đơn hàng ĐÃ XUẤT Excel (exported_at != null).
+ * Xóa đơn đã xuất, trạng thái kết thúc, quá hạn không cập nhật CRM và không có webhook tồn đọng.
  * Đồng thời auto-cleanup: sync_logs + activity_logs theo cấu hình động.
  */
 export async function DELETE(request: Request) {
@@ -144,87 +153,28 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: 'Cần nhập chính xác: DELETE' }, { status: 400 });
     }
 
-    const exportedCount = await prisma.order.count({
-      where: {
-        OR: [
-          { exported_at: { not: null } },
-          { sheets_exported_at: { not: null } },
-        ],
-      },
-    });
-
-    if (exportedCount === 0) {
-      return NextResponse.json({ success: false, error: 'Không có đơn hàng đã xuất (Excel/Sheets) để dọn dẹp' }, { status: 400 });
-    }
-
-    // ── Read dynamic cleanup settings (from cache) ──
+    const days = retentionDays(body.retentionDays);
     const settings = await getSettings();
-
-    const syncLogCutoff = new Date(Date.now() - toMs(
-      Number(settings.sync_log_cleanup_value),
-      settings.sync_log_cleanup_unit,
-    ));
-    const activityLogCutoff = new Date(Date.now() - toMs(
-      Number(settings.activity_log_cleanup_value),
-      settings.activity_log_cleanup_unit,
-    ));
-
-    // 1. Delete sync logs of exported orders
-    const exportedOrderIds = await prisma.order.findMany({
-      where: {
-        OR: [
-          { exported_at: { not: null } },
-          { sheets_exported_at: { not: null } },
-        ],
-      },
-      select: { id: true },
-    });
-    const ids = exportedOrderIds.map(o => o.id);
-
-    await prisma.orderSyncLog.deleteMany({
-      where: { order_id: { in: ids } },
-    });
-
-    // 2. Delete exported orders
-    const result = await prisma.order.deleteMany({
-      where: {
-        OR: [
-          { exported_at: { not: null } },
-          { sheets_exported_at: { not: null } },
-        ],
-      },
-    });
-
-    // 3. Auto-cleanup: activity_logs theo cấu hình
-    const oldLogs = await prisma.activityLog.deleteMany({
-      where: { created_at: { lt: activityLogCutoff } },
-    });
-
-    // 4. Auto-cleanup: sync_logs cũ theo cấu hình
-    const oldSyncLogs = await prisma.orderSyncLog.deleteMany({
-      where: { created_at: { lt: syncLogCutoff } },
-    });
-
-    // Log activity
-    const unitLabels: Record<string, string> = { days: 'ngày', hours: 'giờ', minutes: 'phút', seconds: 'giây' };
-    await prisma.activityLog.create({
-      data: {
-        action: 'PURGE',
-        count: result.count,
-        note: `Dọn ${result.count} đơn đã xuất (Excel/Sheets)` +
-          (oldLogs.count > 0 ? ` · ${oldLogs.count} activity logs (>${settings.activity_log_cleanup_value} ${unitLabels[settings.activity_log_cleanup_unit] || settings.activity_log_cleanup_unit})` : '') +
-          (oldSyncLogs.count > 0 ? ` · ${oldSyncLogs.count} sync logs (>${settings.sync_log_cleanup_value} ${unitLabels[settings.sync_log_cleanup_unit] || settings.sync_log_cleanup_unit})` : ''),
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Đã xóa ${result.count} đơn hàng đã xuất (Excel/Sheets)`,
-      deletedCount: result.count,
-      cleanedActivityLogs: oldLogs.count,
-      cleanedSyncLogs: oldSyncLogs.count,
-    });
+    const cutoff = new Date(Date.now() - days * 86400000);
+    const result = await prisma.$transaction(async tx => {
+      // Briefly block writes so an accepted webhook or CRM update cannot race the eligibility check.
+      // Reads remain available. Lock orders before inbox to match worker write order.
+      await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+      await tx.$executeRaw`LOCK TABLE orders, retailcrm_events IN SHARE ROW EXCLUSIVE MODE`;
+      const deleted = await tx.$queryRaw<{ id: number }[]>(Prisma.sql`DELETE FROM orders o WHERE ${purgeEligibility(cutoff)} RETURNING o.id`);
+      if (!deleted.length) return null;
+      // FK cascade deletes only the selected orders' sync logs.
+      const oldLogs = await tx.activityLog.deleteMany({ where: { created_at: { lt: new Date(Date.now() - toMs(Number(settings.activity_log_cleanup_value), settings.activity_log_cleanup_unit)) } } });
+      const oldSyncLogs = await tx.orderSyncLog.deleteMany({ where: { created_at: { lt: new Date(Date.now() - toMs(Number(settings.sync_log_cleanup_value), settings.sync_log_cleanup_unit)) } } });
+      await tx.activityLog.create({ data: { action: 'PURGE', count: deleted.length,
+        note: 'Dọn ' + deleted.length + ' đơn đã xuất, trạng thái kết thúc, không cập nhật CRM quá ' + days + ' ngày; không có webhook tồn đọng' } });
+      return { count: deleted.length, oldLogs: oldLogs.count, oldSyncLogs: oldSyncLogs.count };
+    }, { timeout: 30000, maxWait: 5000 });
+    if (!result) return NextResponse.json({ success: false, error: 'Không có đơn đủ điều kiện: đã xuất, trạng thái kết thúc, quá hạn và không có webhook tồn đọng' }, { status: 400 });
+    return NextResponse.json({ success: true, message: 'Đã xóa ' + result.count + ' đơn đủ điều kiện',
+      deletedCount: result.count, cleanedActivityLogs: result.oldLogs, cleanedSyncLogs: result.oldSyncLogs });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Thời hạn')) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error purging data:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }

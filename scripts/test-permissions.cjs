@@ -50,7 +50,7 @@ test('both group roles are denied every order mutation, retry and total-admin re
   for (const actor of [manager, member]) for (const [file, method] of cases) {
     const requireAdmin = async () => ({ error: next.NextResponse.json({ error: 'Forbidden' }, { status: 403 }) });
     const route = load(file, { 'next/server': next, '@/lib/prisma': { prisma: {} }, '@/lib/require-auth': { requireAdmin, requireAuth: async () => ({ user: actor }) },
-      '@/lib/permissions': permissions, '@/lib/retailcrm': {}, '@/lib/ladipage-order': {}, '@/lib/settings-cache': {}, '@/lib/order-id': {} });
+      '@/lib/permissions': permissions, '@/lib/retailcrm': {}, '@/lib/ladipage-order': {}, '@/lib/order-retention': load('src/lib/order-retention.ts'), '@/lib/settings-cache': {}, '@/lib/order-id': {} });
     assert.equal(typeof route[method], 'function', file + ' ' + method);
     const result = await route[method]({}, { params: Promise.resolve({ id: '1' }) });
     assert.equal(result.status, 403, file + ' ' + method);

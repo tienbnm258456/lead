@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 
 interface StorageData {
   totalOrders: number;
+  purgeableOrders: number;
+  retentionDays: number;
   exportedOrders: number;
   unexportedOrders: number;
   dbSizeMB: number;
@@ -36,6 +38,7 @@ interface CleanupSettings {
 export default function StoragePage() {
   const [data, setData] = useState<StorageData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retentionDays, setRetentionDays] = useState(60);
   const [confirmText, setConfirmText] = useState('');
   const [purging, setPurging] = useState(false);
   const [showPurgePanel, setShowPurgePanel] = useState(false);
@@ -47,9 +50,8 @@ export default function StoragePage() {
   const [reloadingCache, setReloadingCache] = useState(false);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     try {
-      const res = await fetch('/api/storage');
+      const res = await fetch('/api/storage?retentionDays=' + retentionDays);
       const json = await res.json();
       if (json.success) setData(json.data);
     } catch {
@@ -57,7 +59,7 @@ export default function StoragePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [retentionDays]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -67,7 +69,10 @@ export default function StoragePage() {
     } catch { /* use defaults */ }
   }, []);
 
-  useEffect(() => { fetchData(); fetchSettings(); }, [fetchData, fetchSettings]);
+  useEffect(() => {
+    const timer = setTimeout(() => { void fetchData(); void fetchSettings(); }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchData, fetchSettings]);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -106,6 +111,7 @@ export default function StoragePage() {
   };
 
   const handlePurge = async () => {
+    if (!data || data.retentionDays !== retentionDays || data.purgeableOrders === 0) { toast.error('Vui lòng tải lại số đơn đủ điều kiện'); return; }
     if (confirmText !== 'DELETE') {
       toast.error('Vui lòng nhập chính xác: DELETE');
       return;
@@ -115,7 +121,7 @@ export default function StoragePage() {
       const res = await fetch('/api/storage', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmText }),
+        body: JSON.stringify({ confirmText, retentionDays }),
       });
       const json = await res.json();
       if (json.success) {
@@ -199,7 +205,7 @@ export default function StoragePage() {
             </div>
           </div>
           <p className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-            {data.exportedOrders > 0 ? '⚠ Có thể dọn dẹp để giải phóng' : '✓ Không có đơn cần dọn dẹp'}
+            {data.exportedOrders > 0 ? 'Đã xuất; chỉ dọn đơn đủ điều kiện bên dưới' : '✓ Không có đơn cần dọn dẹp'}
           </p>
         </div>
 
@@ -394,7 +400,7 @@ export default function StoragePage() {
             <div>
               <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Kiểm tra file</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
-                Mở file Excel kiểm tra data đầy đủ. Đơn đã xuất sẽ hiện ở ô &ldquo;Đã xuất Excel (chưa clear)&rdquo;.
+                Kiểm tra file đã xuất. Đơn chỉ được dọn khi trạng thái kết thúc và quá thời hạn không cập nhật CRM.
               </p>
             </div>
           </div>
@@ -410,6 +416,14 @@ export default function StoragePage() {
         </div>
       </div>
 
+      <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
+        Dọn các đơn đã xuất Excel/Google Sheets, đã kết thúc và không cập nhật trạng thái trong
+        <select value={retentionDays} disabled={purging} onChange={e => { setRetentionDays(Number(e.target.value)); setConfirmText(''); setShowPurgePanel(false); }}
+          className="rounded-lg border px-3 py-2" style={{ background: 'var(--card)', color: 'var(--foreground)', borderColor: 'var(--border)' }}>
+          {[30, 60, 90].map(days => <option key={days} value={days}>{days} ngày</option>)}
+        </select>
+      </label>
+
       {/* Row 4: Purge action */}
       <div className={`${cardBase} border-2`}
         style={{ background: 'var(--card)', borderColor: showPurgePanel ? 'rgb(239 68 68 / 0.4)' : 'var(--border)' }}>
@@ -419,15 +433,15 @@ export default function StoragePage() {
               <Trash2 className="h-5 w-5 text-red-500" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Dọn dẹp đơn đã xuất Excel</h3>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Dọn đơn đã kết thúc và quá hạn</h3>
               <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                {data.exportedOrders > 0
-                  ? `⚠ Có ${formatNumber(data.exportedOrders)} đơn đã xuất Excel chưa được clear`
+                {data.purgeableOrders > 0
+                  ? `⚠ Có ${formatNumber(data.purgeableOrders)} đơn đủ điều kiện xóa`
                   : '✓ Không có đơn nào cần dọn dẹp'}
               </p>
             </div>
           </div>
-          <button onClick={() => setShowPurgePanel(!showPurgePanel)} disabled={data.exportedOrders === 0}
+          <button onClick={() => setShowPurgePanel(!showPurgePanel)} disabled={loading || data.retentionDays !== retentionDays || data.purgeableOrders === 0}
             className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium text-red-500 transition-all hover:bg-red-500/10 hover:border-red-500/30 disabled:opacity-40 disabled:pointer-events-none"
             style={{ borderColor: 'var(--border)' }}>
             <ShieldAlert className="h-4 w-4" /> {showPurgePanel ? 'Đóng' : 'Dọn dẹp'}
@@ -441,8 +455,10 @@ export default function StoragePage() {
               <div className="text-xs" style={{ color: 'var(--foreground)' }}>
                 <p className="font-semibold">Lưu ý quan trọng:</p>
                 <ul className="mt-1 list-disc pl-4 space-y-0.5" style={{ color: 'var(--muted-foreground)' }}>
-                  <li>Chỉ xóa đơn hàng đã được <strong>xuất Excel</strong> (exported_at ≠ null)</li>
-                  <li>Đơn <strong>chưa xuất Excel</strong> được giữ nguyên an toàn</li>
+                  <li>Đã xuất Excel hoặc Google Sheets, thuộc trạng thái kết thúc và không cập nhật CRM quá <strong>{retentionDays} ngày</strong>.</li>
+                  <li>Thời hạn tính theo ngày đổi trạng thái hoặc nhận sự kiện gần nhất; không tính theo lần gọi GET kiểm tra.</li>
+                  <li>Giữ đơn còn webhook chờ/lỗi, chưa có mốc cập nhật hoặc chưa kết thúc đối soát.</li>
+                  <li>Trạng thái được xóa: đã giao và thanh toán, đã đóng/hủy, đơn trùng/không hợp lệ/test, đã hoàn hàng hoặc đã hoàn tiền.</li>
                   <li>Hành động này <strong>không thể hoàn tác</strong> — hãy chắc chắn đã lưu file Excel</li>
                 </ul>
               </div>
@@ -450,7 +466,7 @@ export default function StoragePage() {
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
-                Nhập <span className="text-red-500 font-mono">DELETE</span> để xác nhận xóa {formatNumber(data.exportedOrders)} đơn
+                Nhập <span className="text-red-500 font-mono">DELETE</span> để xác nhận xóa {formatNumber(data.purgeableOrders)} đơn
               </label>
               <div className="flex gap-3">
                 <input type="text" placeholder="DELETE" value={confirmText}
@@ -458,12 +474,12 @@ export default function StoragePage() {
                   className="flex-1 rounded-lg border px-3 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-red-500/30"
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   onKeyDown={(e) => { if (e.key === 'Enter' && confirmText === 'DELETE') handlePurge(); }} />
-                <button onClick={handlePurge} disabled={purging || confirmText !== 'DELETE'}
+                <button onClick={handlePurge} disabled={purging || loading || data.retentionDays !== retentionDays || data.purgeableOrders === 0 || confirmText !== 'DELETE'}
                   className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-red-700 disabled:opacity-50 disabled:pointer-events-none">
                   {purging ? (
                     <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> Đang xóa...</>
                   ) : (
-                    <><Trash2 className="h-4 w-4" /> Xóa {formatNumber(data.exportedOrders)} đơn</>
+                    <><Trash2 className="h-4 w-4" /> Xóa {formatNumber(data.purgeableOrders)} đơn</>
                   )}
                 </button>
               </div>

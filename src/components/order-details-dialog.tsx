@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { CrmStatusBadge } from '@/components/crm-status-badge';
+import { getCrmStatusDisplay } from '@/lib/crm-status-display';
 import { X } from 'lucide-react';
 
 export interface OrderDetailData {
@@ -15,6 +17,7 @@ export interface OrderDetailData {
   selected_package: string | null;
   selected_size: string | null;
   sync_status: string;
+  crm_status?: string | null;
   url_page: string | null;
   landing_slug: string | null;
   created_at: string;
@@ -64,6 +67,7 @@ export function OrderDetailsDialog({ order, landingPageName, onClose }: {
     else invalidItems = true;
   } catch { invalidItems = true; }
   const text = (value: unknown) => typeof value === 'string' || typeof value === 'number' ? value : undefined;
+  const crmStatus = getCrmStatusDisplay(order.crm_status);
   const needsReview = items.some(item => item.selectionError);
 
   return <dialog ref={dialog} aria-labelledby="order-details-title"
@@ -121,6 +125,15 @@ export function OrderDetailsDialog({ order, landingPageName, onClose }: {
             </dl>
           </div>)}
         </div>}
+      </section>
+      <section>
+        <h3 className="mb-3 font-semibold">Trạng thái đơn hàng CRM</h3>
+        <div className="mb-4"><CrmStatusBadge code={order.crm_status} /></div>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nhóm trạng thái" value={crmStatus.groupLabel} />
+          <Field label="Mã gốc CRM" value={crmStatus.code} />
+          <div className="sm:col-span-2"><Field label="Ý nghĩa" value={crmStatus.description} /></div>
+        </dl>
       </section>
       <section>
         <h3 className="mb-3 font-semibold">Đồng bộ RetailCRM</h3>

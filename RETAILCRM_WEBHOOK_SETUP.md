@@ -71,7 +71,7 @@ WHERE event_id = 'EVENT_ID_TO_RETRY' AND processed_at IS NULL;
 
 ## Giới hạn của bước triển khai này
 - Chưa bổ sung cột trạng thái nghiệp vụ CRM trên giao diện/Excel/Google Sheets.
-- Chưa sửa job xóa đơn sau xuất Sheets. Nếu đơn đã xóa, inbox giữ sự kiện và ghi lỗi Local order missing or previously purged; không tự tạo lại đơn.
+- Job xuất Sheets giữ đơn sau xuất để tiếp tục nhận trạng thái CRM. Nếu đơn đã bị xóa trước đây hoặc xóa thủ công, inbox vẫn giữ sự kiện và ghi lỗi Local order missing or previously purged; không tự tạo lại đơn.
 - Inbox không có FK đến orders nên không mất theo thao tác xóa đơn. Chưa có chính sách tự dọn inbox.
 - GET chỉ lấy trạng thái, không gửi sửa đơn hay sửa trạng thái sang phía đối tác.
 
@@ -81,3 +81,10 @@ Mỗi lần gọi GET CRM ghi log [RetailCRM Status] REQUEST và RESPONSE, có r
 
 ## Site cho GET trạng thái
 Đặt RETAILCRM_STATUS_SITE=bigbox trong .env / .env.production. GET trạng thái ưu tiên biến này, fallback RETAILCRM_SITE khi chưa đặt. Biến RETAILCRM_SITE của luồng tạo đơn được giữ riêng. Restart ứng dụng sau khi đổi cấu hình.
+
+## Mapping trạng thái giao diện
+Mapping 45 mã thuộc 9 nhóm theo tài liệu K2S ngày 05/11/2026 nằm ở src/lib/crm-status-display.ts. Bảng và chi tiết đơn dùng chung CrmStatusBadge; chi tiết hiển thị tên tiếng Việt, nhóm, mã gốc và giải thích. Database/API vẫn giữ mã CRM gốc. Khi chưa có mã, hiển thị Chờ xác nhận; mã mới chưa biết hiển thị nguyên mã. Không suy diễn thứ tự chuyển trạng thái hoặc thay đổi logic worker.
+
+## Dọn đơn thủ công theo thời hạn
+Tab Dung lượng mặc định 60 ngày, chọn 30/60/90 ngày. API GET /api/storage?retentionDays=60 trả purgeableOrders; DELETE /api/storage nhận confirmText=DELETE và retentionDays. Cả preview và xóa dùng chung predicate: đã xuất Excel hoặc Sheets; trạng thái kết thúc trong payoff/no-call/cancel-other/duplicate/trash/testy/otmena-net-tovara/return/refund-done; không cập nhật quá hạn; không còn webhook chưa xử lý (kể cả hết retry). Thời gian lấy mốc mới nhất giữa ngày tạo đơn, crm_status_updated_at và ngày nhận webhook gần nhất; cần có mốc CRM hoặc sự kiện đã xử lý. Không lấy crm_status_checked_at hoặc updated_at nội bộ để gia hạn. Khi xóa có transaction và khóa ghi ngắn trên orders/retailcrm_events để kiểm tra lại, tránh xóa theo số lượng preview cũ; người dùng khác vẫn đọc được. Request ghi có thể chờ ngắn trong lúc dọn. Webhook thực sự đến sau khi đơn đã xóa vẫn được lưu và báo không tìm thấy đơn; không thể đảm bảo CRM không mở lại đơn sau thời hạn.
+Migration 20261105120000_order_retention_event_index chỉ thêm index tra sự kiện theo external_id và received_at, không thêm cột dữ liệu. Production chạy npx prisma migrate deploy trước khi build/restart. Xuất tự động vẫn không xóa đơn.

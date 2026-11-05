@@ -337,5 +337,6 @@ model RetailCrmEvent {
   error String? @db.Text
   received_at DateTime @default(now())
   @@index([processed_at, next_attempt_at])
+  @@index([external_id, received_at])
   @@map("retailcrm_events")
 }

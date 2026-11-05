@@ -224,6 +224,8 @@ export default function LandingPagesPage() {
   const removeSize = (idx: number) => setFormSizes(prev => prev.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
+    const invalidPromotion = formVariants.findIndex(v => !v.promotion.trim() || v.promotion.trim().length > 100);
+    if (invalidPromotion >= 0) { toast.error('Gói ' + (invalidPromotion + 1) + ': Vui lòng nhập thông tin khuyến mại, ví dụ 1+1 hoặc 2+2 (tối đa 100 ký tự)'); return; }
     const variants: Variant[] = formVariants.map(v => ({
       id: v.id,
       label: v.label,
@@ -251,7 +253,7 @@ export default function LandingPagesPage() {
     }
   };
 
-  const isFormValid = formName.trim() && formXmlId.trim() && formXmlId.trim().length <= 255 && !/[,\r\n]/.test(formXmlId) && formVariants.length > 0 && formVariants.every(v => v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
+  const isFormValid = formName.trim() && formXmlId.trim() && formXmlId.trim().length <= 255 && !/[,\r\n]/.test(formXmlId) && formVariants.length > 0 && formVariants.every(v => v.promotion.trim() && v.promotion.trim().length <= 100 && v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
     && (!formHasSizes || formSizes.length > 0);
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
@@ -557,9 +559,13 @@ export default function LandingPagesPage() {
                         style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                         placeholder="Tên gói (VD: 1 dona xarid + 1 sovga – 299.000 UZS)"
                         value={v.label} onChange={e => updateVariant(idx, 'label', e.target.value)} />
-                      <label className="block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Thông tin khuyến mại
-                        <input aria-label="Thông tin khuyến mại" maxLength={100} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                          placeholder="Ví dụ: 1+1 hoặc 2+2" value={v.promotion} onChange={e => updateVariant(idx, 'promotion', e.target.value)} />
+                      <label className="block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Thông tin khuyến mại <span className="text-red-500">*</span>
+                        <input required aria-required="true" aria-describedby={`promotion-help-${idx}`} aria-label={`Thông tin khuyến mại gói ${idx + 1}`} maxLength={100} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                          placeholder="VD: 1+1 (mua 1 tặng 1), 2+2 (mua 2 tặng 2)" value={v.promotion} onChange={e => updateVariant(idx, 'promotion', e.target.value)} />
+                        <span id={`promotion-help-${idx}`} className="mt-1.5 block text-xs font-normal leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+                          Nhập mã khuyến mại của gói đã thống nhất với đối tác: <strong>1+1</strong> = mua 1 tặng 1, <strong>2+2</strong> = mua 2 tặng 2. Chỉ nhập mã, không nhập phần giải thích hoặc giá tiền.
+                          Mã này được ghép với XML ID sản phẩm và size/tùy chọn để CRM nhận diện đúng gói khách đặt.
+                        </span>
                       </label>
                       <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Mỗi gói chọn là 1 combo. Tất cả size khách chọn được ghi chung cho từng gói để sale gọi xác nhận. Giá/ship nhập UZS đầy đủ (299.000 → CRM 299).</p>
                       <div className="grid grid-cols-3 gap-2">

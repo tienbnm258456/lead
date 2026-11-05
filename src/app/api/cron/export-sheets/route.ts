@@ -125,7 +125,6 @@ export async function GET(request: Request) {
     // ── Export (với progressive marking) ──
     console.log(`${TAG} 📤 Đang gửi data lên Google Sheets...`);
     const exportStart = Date.now();
-    const orderIds = orders.map(o => o.id);
 
     const result = await exportOrdersToGoogleSheets(
       orders.map(o => ({
@@ -163,42 +162,19 @@ export async function GET(request: Request) {
     console.log(`${TAG} 🔗 ${result.spreadsheetUrl}`);
     console.log(`${TAG} ⏱️  Export: ${exportDuration}ms`);
 
-    // ── Auto-Cleanup: Xóa đơn đã xuất thành công khỏi DB ──
-    // Xóa theo danh sách ID cụ thể (không dùng điều kiện mở) → an toàn, không ảnh hưởng đơn mới
-    console.log(`${TAG} 🗑️  Auto-cleanup: xóa ${orderIds.length} đơn đã xuất khỏi DB...`);
-
-    // 1. Xóa sync logs trước (FK constraint)
-    const deletedSyncLogs = await prisma.orderSyncLog.deleteMany({
-      where: { order_id: { in: orderIds } },
-    });
-
-    // 2. Xóa orders
-    const purgeResult = await prisma.order.deleteMany({
-      where: { id: { in: orderIds } },
-    });
-
-    // 3. Log PURGE
-    await prisma.activityLog.create({
-      data: {
-        action: 'PURGE',
-        count: purgeResult.count,
-        note: `[Auto] Dọn ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs sau khi xuất Google Sheets "${result.sheetName}"`.slice(0, 500),
-      },
-    });
-
-    console.log(`${TAG} 🗑️  Đã xóa ${purgeResult.count} đơn + ${deletedSyncLogs.count} sync logs`);
+    // Keep orders and sync history so later RetailCRM status events can still update the order.
     console.log(`${TAG} ⏱️  Total: ${Date.now() - startTime}ms`);
     console.log(`${TAG} ──────────────────────────────────────`);
 
     return NextResponse.json({
       success: true,
-      message: `Đã xuất ${orders.length} đơn hàng lên Google Sheets và dọn dẹp DB`,
+      message: `Đã xuất ${orders.length} đơn hàng lên Google Sheets; giữ nguyên dữ liệu trong DB`,
       sheetName: result.sheetName,
       totalRows: result.totalRows,
       spreadsheetUrl: result.spreadsheetUrl,
       destinations: result.destinations,
-      purgedOrders: purgeResult.count,
-      purgedSyncLogs: deletedSyncLogs.count,
+      purgedOrders: 0,
+      purgedSyncLogs: 0,
     });
   } catch (error) {
     console.error(`${TAG} 💥`, error instanceof Error ? error.message : error);

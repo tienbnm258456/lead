@@ -101,6 +101,13 @@ export async function POST(request: NextRequest) {
     if (true && (typeof body.xml_id !== 'string' || !body.xml_id.trim() || body.xml_id.trim().length > 255 || /[,\r\n]/.test(body.xml_id))) {
       return NextResponse.json({ error: 'Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng' }, { status: 400 });
     }
+    if (Array.isArray(body.variants)) {
+      const invalidPromotion = body.variants.findIndex((v: Record<string, unknown> | null) =>
+        !v || typeof v.promotion !== 'string' || !v.promotion.trim() || v.promotion.trim().length > 100);
+      if (invalidPromotion >= 0) return NextResponse.json({
+        error: 'Gói ' + (invalidPromotion + 1) + ': Thông tin khuyến mại là bắt buộc, tối đa 100 ký tự. Nhập mã đã thống nhất với đối tác, ví dụ 1+1 hoặc 2+2, để ghép vào XML ID gửi CRM.',
+      }, { status: 400 });
+    }
     if (body.variants !== undefined && (!Array.isArray(body.variants) || body.variants.length === 0 || body.variants.some((v: Record<string, unknown>) =>
       typeof v.label !== 'string' || !v.label.trim() ||
       typeof v.price !== 'number' || !Number.isFinite(v.price) || v.price < 0 ||
