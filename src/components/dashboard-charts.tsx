@@ -15,18 +15,15 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import {
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   ShoppingCart,
   PackagePlus,
   Clock,
   CheckCircle2,
-  AlertCircle,
   Globe,
   Activity,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { dashboardCrmGroup } from '@/lib/dashboard-crm-groups';
 import { formatDisplayNumber, formatDashboardDate } from '@/lib/display-format';
 
 // ── Types ──
@@ -34,9 +31,8 @@ interface DashboardChartsProps {
   stats: {
     total: number;
     todayCount: number;
-    pendingCount: number;
-    successCount: number;
-    failedCount: number;
+    processingCount: number;
+    completedCount: number;
   };
   dailyOrders: { date: string; count: number; revenue: number }[];
   statusDistribution: { name: string; value: number; color: string }[];
@@ -47,24 +43,10 @@ interface DashboardChartsProps {
     customer_name: string;
     customer_phone: string;
     total_price: string | number;
-    sync_status: string;
+    crm_status: string | null;
     created_at: string;
   }[];
 }
-
-// ── Status maps — Using new CSS variable–based badge classes ──
-const statusLabels: Record<string, string> = {
-  PENDING: 'Chờ xử lý',
-  SUCCESS: 'Thành công',
-  FAILED: 'Thất bại',
-  TIMEOUT: 'Timeout',
-};
-const statusBadge: Record<string, string> = {
-  PENDING: 'badge-warning',
-  SUCCESS: 'badge-success',
-  FAILED: 'badge-error',
-  TIMEOUT: 'badge-error',
-};
 
 // ── Custom chart tooltip ──
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
@@ -88,7 +70,6 @@ export default function DashboardCharts({
   topLandingPages,
   recentOrders,
 }: DashboardChartsProps) {
-  const successRate = stats.total > 0 ? Math.round((stats.successCount / stats.total) * 100) : 0;
 
   const cards = [
     {
@@ -108,20 +89,20 @@ export default function DashboardCharts({
       ring: 'ring-emerald-500/10',
     },
     {
-      title: 'Chờ xử lý',
-      value: stats.pendingCount,
+      title: 'Nhóm đang xử lý',
+      value: stats.processingCount,
       icon: Clock,
       gradient: 'from-amber-500 to-orange-600',
       shadow: 'shadow-amber-500/15',
       ring: 'ring-amber-500/10',
     },
     {
-      title: 'Tỉ lệ thành công',
-      value: `${successRate}%`,
-      icon: successRate >= 80 ? TrendingUp : successRate > 0 ? TrendingDown : Activity,
-      gradient: successRate >= 80 ? 'from-emerald-500 to-green-600' : 'from-red-500 to-rose-600',
-      shadow: successRate >= 80 ? 'shadow-emerald-500/15' : 'shadow-red-500/15',
-      ring: successRate >= 80 ? 'ring-emerald-500/10' : 'ring-red-500/10',
+      title: 'Nhóm hoàn thành',
+      value: stats.completedCount,
+      icon: CheckCircle2,
+      gradient: 'from-emerald-500 to-green-600',
+      shadow: 'shadow-emerald-500/15',
+      ring: 'ring-emerald-500/10',
     },
   ];
 
@@ -220,8 +201,8 @@ export default function DashboardCharts({
         {/* Donut Chart — Status distribution */}
         <div className="card-elevated p-5">
           <div className="mb-4">
-            <h2 className="text-section-heading">Phân bố trạng thái</h2>
-            <p className="text-caption mt-0.5">Tỉ lệ trạng thái đồng bộ</p>
+            <h2 className="text-section-heading">Trạng thái đơn hàng CRM</h2>
+            <p className="text-caption mt-0.5">Phân bố theo nhóm trạng thái của đối tác</p>
           </div>
 
           <div className="h-[180px]">
@@ -263,13 +244,13 @@ export default function DashboardCharts({
           </div>
 
           {/* Legend */}
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2">
             {statusDistribution.map((item) => (
               <div key={item.name} className="flex items-center gap-2 text-xs">
                 <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: item.color }} />
                 <span className="text-caption">{item.name}</span>
                 <span className="ml-auto font-bold tabular-nums" style={{ color: 'var(--foreground)' }}>
-                  {item.value}
+                  {formatDisplayNumber(item.value)}
                 </span>
               </div>
             ))}
@@ -359,26 +340,17 @@ export default function DashboardCharts({
                 </p>
               </div>
             ) : (
-              recentOrders.map((order) => (
+              recentOrders.map((order) => {
+                const group = dashboardCrmGroup(order.crm_status);
+                return (
                 <div
                   key={order.id}
                   className="flex items-center gap-3 rounded-xl border p-3 transition-colors hover:bg-[var(--muted)]"
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  {/* Status icon */}
-                  <div className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
-                    order.sync_status === 'SUCCESS' ? 'badge-success' :
-                    order.sync_status === 'PENDING' ? 'badge-warning' :
-                    'badge-error'
-                  )}>
-                    {order.sync_status === 'SUCCESS' ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : order.sync_status === 'PENDING' ? (
-                      <Clock className="h-4 w-4" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4" />
-                    )}
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{ color: group.color, background: group.color + '12' }} title={group.name}>
+                    <Activity className="h-4 w-4" />
                   </div>
 
                   {/* Info */}
@@ -387,10 +359,9 @@ export default function DashboardCharts({
                       <span className="font-mono text-xs font-bold" style={{ color: 'var(--primary)' }}>
                         {order.external_id}
                       </span>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        statusBadge[order.sync_status] || 'badge-info'
-                      }`}>
-                        {statusLabels[order.sync_status] || order.sync_status}
+                      <span className="inline-flex max-w-56 truncate whitespace-nowrap rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+                        style={{ color: group.color, background: group.color + '12', borderColor: group.color + '38' }} title={group.name}>
+                        {group.name}
                       </span>
                     </div>
                     <p className="text-caption truncate mt-0.5">
@@ -408,7 +379,8 @@ export default function DashboardCharts({
                     </p>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

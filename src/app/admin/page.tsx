@@ -1,3 +1,4 @@
+import { groupDashboardCrmStatuses } from '@/lib/dashboard-crm-groups';
 import { requireAuth } from '@/lib/require-auth';
 import { dataScope } from '@/lib/permissions';
 import { redirect } from 'next/navigation';
@@ -8,22 +9,15 @@ import DashboardCharts from '@/components/dashboard-charts';
 // Luôn fetch data mới từ DB mỗi lần truy cập — không dùng cache tĩnh từ lúc build
 export const dynamic = 'force-dynamic';
 
-async function getStats(scope: Prisma.OrderWhereInput) {
-  const [total, pendingCount, successCount, failedCount, todayCount] = await Promise.all([
+async function getOverview(scope: Prisma.OrderWhereInput) {
+  const [total, todayCount, rawStatuses] = await Promise.all([
     prisma.order.count({ where: scope }),
-    prisma.order.count({ where: { ...scope, sync_status: 'PENDING' } }),
-    prisma.order.count({ where: { ...scope, sync_status: 'SUCCESS' } }),
-    prisma.order.count({ where: { ...scope, sync_status: { in: ['FAILED', 'TIMEOUT'] } } }),
-    prisma.order.count({
-      where: { ...scope,
-        created_at: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        },
-      },
-    }),
+    prisma.order.count({ where: { ...scope, created_at: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
+    prisma.order.groupBy({ by: ['crm_status'], where: scope, _count: { id: true } }),
   ]);
-
-  return { total, pendingCount, successCount, failedCount, todayCount };
+  const statusDistribution = groupDashboardCrmStatuses(rawStatuses);
+  const count = (key: string) => statusDistribution.find(group => group.key === key)?.value || 0;
+  return { stats: { total, todayCount, processingCount: count('processing'), completedCount: count('completed') }, statusDistribution };
 }
 
 async function getDailyOrders(scope: Prisma.OrderWhereInput) {
@@ -56,22 +50,6 @@ async function getDailyOrders(scope: Prisma.OrderWhereInput) {
   }
 
   return result;
-}
-
-async function getStatusDistribution(scope: Prisma.OrderWhereInput) {
-  const [pending, success, failed, timeout] = await Promise.all([
-    prisma.order.count({ where: { ...scope, sync_status: 'PENDING' } }),
-    prisma.order.count({ where: { ...scope, sync_status: 'SUCCESS' } }),
-    prisma.order.count({ where: { ...scope, sync_status: 'FAILED' } }),
-    prisma.order.count({ where: { ...scope, sync_status: 'TIMEOUT' } }),
-  ]);
-
-  return [
-    { name: 'Thành công', value: success, color: '#10b981' },
-    { name: 'Chờ xử lý', value: pending, color: '#f59e0b' },
-    { name: 'Thất bại', value: failed, color: '#ef4444' },
-    { name: 'Timeout', value: timeout, color: '#f97316' },
-  ];
 }
 
 async function getTopLandingPages(scope: Prisma.OrderWhereInput) {
@@ -115,7 +93,7 @@ async function getRecentOrders(scope: Prisma.OrderWhereInput) {
     customer_name: o.customer_name,
     customer_phone: o.customer_phone,
     total_price: o.total_price.toString(),
-    sync_status: o.sync_status,
+    crm_status: o.crm_status,
     created_at: o.created_at.toISOString(),
   }));
 }
@@ -124,20 +102,19 @@ export default async function AdminDashboard() {
   const auth = await requireAuth();
   if (auth.error) redirect('/login');
   const scope = dataScope(auth.user);
-  const [stats, dailyOrders, statusDistribution, topLandingPages, recentOrders] =
+  const [overview, dailyOrders, topLandingPages, recentOrders] =
     await Promise.all([
-      getStats(scope),
+      getOverview(scope),
       getDailyOrders(scope),
-      getStatusDistribution(scope),
       getTopLandingPages(scope),
       getRecentOrders(scope),
     ]);
 
   return (
     <DashboardCharts
-      stats={stats}
+      stats={overview.stats}
       dailyOrders={dailyOrders}
-      statusDistribution={statusDistribution}
+      statusDistribution={overview.statusDistribution}
       topLandingPages={topLandingPages}
       recentOrders={recentOrders}
     />
