@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     if (!page || !page.product.active || page.product.variants.length !== 1) {
       return NextResponse.json({ error: 'Gói sản phẩm không thuộc Landing Page hoặc đã ngừng hoạt động' }, { status: 400 });
     }
-    const configured = await ensureOfferXmlIds(prisma, page.product.variants);
+    const configured = page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants);
     const resolved = resolveLandingItems(configured.map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
       configured[0].label, body.selected_size, page.product);
     const selected_package = configured[0].label;

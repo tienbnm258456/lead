@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
       { header: 'Trạng thái thanh toán', key: 'paymentStatus', width: 16 },
       { header: 'Ghi chú đơn hàng', key: 'comment', width: 35 },
       { header: 'URL Landing Page', key: 'urlPage', width: 55 },
+      { header: 'xmlId', key: 'xmlId', width: 35 },
     ];
 
     const styleHeader = (ws: ExcelJS.Worksheet) => {
@@ -124,14 +125,14 @@ export async function GET(request: NextRequest) {
       headerRow.height = 32;
 
       // Auto-filter (A1 → P1 = 16 cột)
-      ws.autoFilter = { from: 'A1', to: 'Q1' };
+      ws.autoFilter = { from: 'A1', to: 'R1' };
 
       // Freeze header row
       ws.views = [{ state: 'frozen', ySplit: 1 }];
     };
 
     const addOrderRow = (ws: ExcelJS.Worksheet, order: typeof orders[0], index: number) => {
-      return parseItems(order.items_json).map((item: { productName?: string; variantLabel?: string; quantity?: number; initialPrice?: number; deliveryFee?: number }, itemIndex: number) => {
+      return parseItems(order.items_json).map((item: { xmlId?: string; productName?: string; variantLabel?: string; quantity?: number; initialPrice?: number; deliveryFee?: number }, itemIndex: number) => {
       const deliveryFee = Number(item.deliveryFee) || 0;
       const productPrice = Number(item.initialPrice) || 0;
 
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
         paymentStatus: 'Chưa thanh toán',
         comment: commentParts.join(', '),
         urlPage: order.url_page || '',
+        xmlId: item.xmlId || '',
       });
 
       // Style alternate rows

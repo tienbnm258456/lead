@@ -24,6 +24,7 @@ interface Order extends OrderDetailData {
   selected_package: string | null;
   selected_size: string | null;
   sync_status: string;
+  crm_status: string | null;
   url_page: string | null;
   landing_slug: string | null;
   exported_at: string | null;
@@ -375,6 +376,7 @@ export default function OrdersPage() {
     { key: 'selected_size', label: 'Tùy chọn', noSort: true },
     { key: 'url_page', label: 'URL Landing Page', noSort: true },
     { key: 'sync_status', label: 'TRẠNG THÁI ĐỒNG BỘ RetailCRM' },
+    { key: 'crm_status', label: 'Trạng thái đơn hàng CRM', noSort: true },
     { key: 'created_at', label: 'Ngày tạo' },
     { key: 'actions', label: '', noSort: true },
   ];
@@ -625,7 +627,7 @@ export default function OrdersPage() {
                   // Right-align price header
                   const align = ['product_price', 'delivery_fee', 'total_price'].includes(col.key) ? 'text-right' : 'text-left';
                   return (
-                    <th key={col.key} className={`px-4 py-3.5 ${align}`}>
+                    <th key={col.key} className={`px-4 py-3.5 ${align} ${['crm_status', 'sync_status'].includes(col.key) ? 'min-w-[200px]' : ''}`}>
                       {col.noSort ? (
                         <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--foreground)', opacity: 0.55 }}>{col.label}</span>
                       ) : (
@@ -760,6 +762,20 @@ export default function OrdersPage() {
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusConfig[order.sync_status]?.classes || 'bg-gray-100 text-gray-700'}`}>
                         {statusConfig[order.sync_status]?.label || order.sync_status}
                       </span>
+                    </td>
+                    <td className="min-w-[200px] px-4 py-3.5 text-sm">
+                      {order.crm_status ? (
+                        <span className="inline-flex max-w-64 items-center truncate whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium select-text"
+                          style={{ borderColor: 'var(--border)', color: 'var(--card-foreground)' }} title={order.crm_status}>
+                          <span className="truncate">{order.crm_status}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium"
+                          style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.22)', color: '#d99416' }}>
+                          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                          Chờ xác nhận
+                        </span>
+                      )}
                     </td>
                     {/* Created at */}
                     <td className="px-4 py-3.5 text-sm tabular-nums whitespace-nowrap" style={{ color: 'var(--card-foreground)' }}>

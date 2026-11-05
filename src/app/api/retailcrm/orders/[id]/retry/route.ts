@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!page) return NextResponse.json({ error: 'Landing page không còn tồn tại' }, { status: 400 });
       const body = items[0].rawPayload || {};
       try {
-        const resolved = resolveLandingItems((await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
+        const resolved = resolveLandingItems((page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
           body.products || body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo,
           body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc, page.product);
         items = resolved.items;

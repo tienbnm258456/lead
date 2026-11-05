@@ -28,6 +28,7 @@ interface SizesConfig {
 }
 
 interface Product {
+  xml_id: string | null;
   id: number;
   name: string;
   slug: string;
@@ -92,6 +93,7 @@ export default function LandingPagesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<LandingPage | null>(null);
   const [formName, setFormName] = useState('');
+  const [formXmlId, setFormXmlId] = useState('');
   const [formVariants, setFormVariants] = useState<FormVariant[]>([emptyVariant()]);
   const [formHasSizes, setFormHasSizes] = useState(false);
   const [formOptionLabel, setFormOptionLabel] = useState('Size');
@@ -169,14 +171,14 @@ export default function LandingPagesPage() {
 
   // ── Form helpers ──────────────────────────────────────────
   const closeForm = () => {
-    setShowForm(false); setEditItem(null); setFormName('');
+    setShowForm(false); setEditItem(null); setFormName(''); setFormXmlId('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
     setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
   };
 
   const openCreateForm = () => {
     setFormGroup('');
-    setEditItem(null); setFormName('');
+    setEditItem(null); setFormName(''); setFormXmlId('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
     setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
     setShowForm(true);
@@ -186,6 +188,7 @@ export default function LandingPagesPage() {
     setFormGroup(String(page.group_id || ''));
     setEditItem(page);
     setFormName(page.name);
+    setFormXmlId(page.product.xml_id || '');
     setFormVariants(
       page.product.variants.map(v => ({
         id: v.id,
@@ -233,6 +236,7 @@ export default function LandingPagesPage() {
 
     const payload = {
       name: formName,
+      xml_id: formXmlId.trim(),
       ...(currentRole === 'ADMIN' ? { group_id: formGroup ? Number(formGroup) : null } : {}),
       variants,
       has_sizes: formHasSizes,
@@ -247,7 +251,7 @@ export default function LandingPagesPage() {
     }
   };
 
-  const isFormValid = formName.trim() && formVariants.length > 0 && formVariants.every(v => v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
+  const isFormValid = formName.trim() && formXmlId.trim() && formXmlId.trim().length <= 255 && !/[,\r\n]/.test(formXmlId) && formVariants.length > 0 && formVariants.every(v => v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
     && (!formHasSizes || formSizes.length > 0);
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
@@ -507,6 +511,13 @@ export default function LandingPagesPage() {
 
             {/* ── Content (scrollable) ── */}
             <div className="flex-1 overflow-y-auto px-7 space-y-6">
+              <div>
+                <label htmlFor="landing-xml-id" className="mb-1.5 block text-sm font-semibold">XML ID do đối tác cấp <span className="text-red-500">*</span></label>
+                <input id="landing-xml-id" maxLength={255} className="w-full rounded-lg border px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                  placeholder="Ví dụ: 3B5ggmZQg35w2QgJWnoZ21" value={formXmlId} onChange={e => setFormXmlId(e.target.value)} />
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>Nhập mã gốc dùng chung cho các gói. Hệ thống tự ghép khuyến mại và size khi gửi CRM.</p>
+              </div>
               {currentRole === 'ADMIN' && <label className="block text-sm font-semibold">Nhóm sở hữu
                 <select className="mt-2 w-full rounded-lg border p-3" style={{ background: 'var(--card)', color: 'var(--foreground)' }} value={formGroup} onChange={e => setFormGroup(e.target.value)}>
                   <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id} disabled={!group.assignable}>{group.display_name}{!group.assignable ? ' (không có Quản lý hoạt động)' : ''}</option>)}
@@ -565,7 +576,7 @@ export default function LandingPagesPage() {
                             placeholder="50.000" value={v.delivery_fee} onChange={e => updateVariant(idx, 'delivery_fee', e.target.value)} />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Số sản phẩm trong combo</label>
+                          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Số lượng combo</label>
                           <input type="number" min="1" className="w-full rounded-lg border px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                             style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                             placeholder="1" value={v.quantity} onChange={e => updateVariant(idx, 'quantity', parseInt(e.target.value) || 1)} />

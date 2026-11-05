@@ -206,3 +206,12 @@ Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong edit
 - Cột Q là URL Landing Page; khóa chống trùng chuyển sang cột R (ẩn). Tab cũ tự thêm cột khi nhận lần xuất tiếp theo, giữ dữ liệu và khóa cũ. Có thể chạy reformatAllYearFiles để nâng cấp tất cả tab đã đăng ký.
 - Đơn mới lấy URL từ trường url_page trong webhook. Đơn cũ không có dữ liệu này sẽ để trống; không suy đoán từ địa chỉ landing page cấu hình.
 - Code/database: chạy npx prisma migrate deploy, npx prisma generate, npm run build rồi restart PM2. Cần hoàn tất baseline migration cũ nếu database chưa có lịch sử migration.
+
+## Mã XML ID đối tác (05/11/2026)
+
+- Thêm/sửa Landing Page: nhập XML ID gốc do đối tác cấp, ví dụ 3B5ggmZQg35w2QgJWnoZ21. Mã dùng chung các gói của trang, lưu trong products.xml_id đã có sẵn; không cần migration mới.
+- API tạo Landing Page nhận xml_id bắt buộc; API sửa nhận xml_id khi muốn cập nhật, không được rỗng hoặc chứa dấu phẩy/xuống dòng.
+- Đơn mới qua webhook và thêm thủ công dùng mã gốc rồi ghép khuyến mại, size khi gửi CRM: 3B5ggmZQg35w2QgJWnoZ21, 1+1, L. Mỗi dòng items_json lưu mã gốc tại thời điểm tạo đơn.
+- Landing Page cũ chưa nhập mã vẫn dùng cơ chế cũ để tiếp tục nhận đơn. Mở sửa và điền mã đối tác để chuyển sang mã mới. Đơn đã tạo giữ nguyên mã lịch sử.
+- Excel thủ công và Sheets tự động thêm cột xmlId ở R, chỉ chứa mã gốc từ từng dòng đơn hàng, không kèm khuyến mại/size. URL vẫn ở Q; khóa chống trùng chuyển sang S (ẩn).
+- Cập nhật toàn bộ src/lib/google-apps-script.js rồi Deploy bản mới trước khi chạy job xuất. Script tự nâng cấp tab cũ 16/17 cột và giữ khóa chống trùng; dữ liệu cũ không được tự suy đoán hoặc ghi đè.

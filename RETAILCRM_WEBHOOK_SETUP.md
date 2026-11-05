@@ -74,3 +74,10 @@ WHERE event_id = 'EVENT_ID_TO_RETRY' AND processed_at IS NULL;
 - Chưa sửa job xóa đơn sau xuất Sheets. Nếu đơn đã xóa, inbox giữ sự kiện và ghi lỗi Local order missing or previously purged; không tự tạo lại đơn.
 - Inbox không có FK đến orders nên không mất theo thao tác xóa đơn. Chưa có chính sách tự dọn inbox.
 - GET chỉ lấy trạng thái, không gửi sửa đơn hay sửa trạng thái sang phía đối tác.
+
+## Request/response log lấy trạng thái
+
+Mỗi lần gọi GET CRM ghi log [RetailCRM Status] REQUEST và RESPONSE, có requestId, externalId, eventId (khi chạy worker), URL che apiKey, HTTP status, thời gian xử lý và toàn bộ response body. Lỗi mạng/timeout ghi ERROR; response lỗi HTTP hoặc không phải JSON vẫn có body để kiểm tra. Xem local ở terminal npm run dev; production: pm2 logs lead-admin --lines 200. Log mới chỉ có từ sau khi triển khai thay đổi, không truy hồi response cũ; không lưu thêm response GET trong database. Response có thể chứa thông tin khách hàng nên chỉ cấp quyền log cho quản trị vận hành.
+
+## Site cho GET trạng thái
+Đặt RETAILCRM_STATUS_SITE=bigbox trong .env / .env.production. GET trạng thái ưu tiên biến này, fallback RETAILCRM_SITE khi chưa đặt. Biến RETAILCRM_SITE của luồng tạo đơn được giữ riêng. Restart ứng dụng sau khi đổi cấu hình.

@@ -186,7 +186,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     console.log(`[LadiPage Webhook] Matched variant: "${matchedVariant.label}" (price: ${matchedVariant.price}, qty: ${matchedVariant.quantity})`);
 
     // ── Determine xmlId ──────────────────────────────────────────────
-    const xmlId = matchedVariant.xml_id || product.xml_id || 'PENDING_XML_ID';
+    const xmlId = product.xml_id || matchedVariant.xml_id || 'PENDING_XML_ID';
     const totalPrice = matchedVariant.price + matchedVariant.delivery_fee;
 
     // ── Create order in DB ───────────────────────────────────────────

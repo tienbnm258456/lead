@@ -136,7 +136,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
     }
 
     // ── Match variant ────────────────────────────────────────────
-    const variants = (await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
+    const variants = (product.xml_id ? product.variants : await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
       id: v.id,
       label: v.label,
       quantity: v.quantity,

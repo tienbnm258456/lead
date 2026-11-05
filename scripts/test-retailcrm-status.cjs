@@ -2,7 +2,7 @@ const test = require('node:test'); const assert = require('node:assert/strict');
 const fs = require('node:fs'); const ts = require('typescript');
 function load(file, mocks = {}, fetchMock) {
  const module = { exports: {} }; const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
- new Function('require','module','exports','fetch',code)(n => n in mocks ? mocks[n] : require(n), module,module.exports,fetchMock);return module.exports;
+ new Function('require','module','exports','fetch',code)(n => n in mocks ? mocks[n] : require(n), module,module.exports,fetchMock && (async (...args) => { const response = await fetchMock(...args); if (!response.text && response.json) response.text = async () => JSON.stringify(await response.json()); return response; }));return module.exports;
 }
 const response = { NextResponse: { json: (body, opts) => ({ body, status: opts?.status || 200 }) } };
 const event = { eventId:'123-confirmed-100', orderId:'123', externalId:'ORD-1', status:'confirmed', updatedAt:'2026-11-04T10:30:00+05:00' };
@@ -45,4 +45,29 @@ test('worker trusts current CRM state, keeps sync_status, retries failures and p
  result=Error('CRM HTTP 503');await worker.processRetailCrmEvents();assert.equal(task.error,'CRM HTTP 503');assert.ok(task.next_attempt_at);assert.equal(task.processed_at,undefined);
  order=null;await worker.processRetailCrmEvents();assert.match(task.error,/missing/);
  locked=false;assert.equal((await worker.processRetailCrmEvents()).busy,true);
+});
+
+
+test('request/response logs include correlation, HTTP errors and non-JSON body without API secrets', async () => {
+ const logs=[];const previous=console.log;console.log=(...args)=>logs.push(args.join(' '));
+ process.env.RETAILCRM_API_KEY='private-key-for-log-test';
+ try {
+   for (const [code, body] of [[200,JSON.stringify({success:true,order:{id:123,externalId:'ORD-1',status:'goriachii'},apiKey:process.env.RETAILCRM_API_KEY})],[403,'Access denied'],[200,'invalid JSON']]) {
+     const api=load('src/lib/retailcrm-status.ts',{},async()=>new Response(body,{status:code}));
+     if(code===200 && body.startsWith('{')) await api.getRetailCrmStatus('ORD-1','event-log-test');
+     else await assert.rejects(()=>api.getRetailCrmStatus('ORD-1','event-log-test'));
+   }
+   const combined=logs.join(' ');assert.match(combined,/REQUEST/);assert.match(combined,/RESPONSE/);assert.match(combined,/goriachii/);assert.match(combined,/403/);assert.match(combined,/Access denied/);assert.match(combined,/invalid JSON/);assert.match(combined,/event-log-test/);assert.match(combined,/requestId/);assert.ok(!combined.includes(process.env.RETAILCRM_API_KEY));
+   const failing=load('src/lib/retailcrm-status.ts',{},async()=>{throw Error('network failed '+process.env.RETAILCRM_API_KEY)});
+   await assert.rejects(()=>failing.getRetailCrmStatus('ORD-1'));assert.match(logs.join(' '),/ERROR/);assert.ok(!logs.join(' ').includes(process.env.RETAILCRM_API_KEY));
+ } finally {console.log=previous;}
+});
+
+
+test('GET status uses dedicated bigbox site ahead of order creation site', async () => {
+ const previous=process.env.RETAILCRM_STATUS_SITE;process.env.RETAILCRM_STATUS_SITE='bigbox';process.env.RETAILCRM_SITE='uzshopping';let actual;
+ try {
+  const api=load('src/lib/retailcrm-status.ts',{},async url=>{actual=url.searchParams.get('site');return new Response(JSON.stringify({success:true,order:{id:123,externalId:'ORD-1',status:'goriachii'}}));});
+  await api.getRetailCrmStatus('ORD-1');assert.equal(actual,'bigbox');
+ } finally {if(previous===undefined)delete process.env.RETAILCRM_STATUS_SITE;else process.env.RETAILCRM_STATUS_SITE=previous;}
 });

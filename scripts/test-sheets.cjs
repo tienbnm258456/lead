@@ -14,8 +14,8 @@ function order(id, date = '2026-11-15T00:00:00Z', productName = 'Đai lưng', sl
   return { id, external_id: 'SAMPLE-' + id, customer_name: 'Nguyễn Văn A', customer_phone: '0977700000', delivery_address: 'Địa chỉ thử nghiệm',
     created_at: date, total_price: 878000, selected_package: '1+1 | 2+2', selected_size: 'S | L', landing_slug: slug,
     sync_status: 'SUCCESS', retailcrm_id: null, url_page: 'https://example.test/vc-cream.store',
-    items_json: JSON.stringify([{ productName, variantLabel: 'Gói 1+1', quantity: 1, initialPrice: 299000, deliveryFee: 50000 },
-      { productName, variantLabel: 'Gói 2+2', quantity: 1, initialPrice: 529000, deliveryFee: 0 }]) };
+    items_json: JSON.stringify([{ xmlId: '3B5ggmZQg35w2QgJWnoZ21', productName, variantLabel: 'Gói 1+1', quantity: 1, initialPrice: 299000, deliveryFee: 50000 },
+      { xmlId: '3B5ggmZQg35w2QgJWnoZ21', productName, variantLabel: 'Gói 2+2', quantity: 1, initialPrice: 529000, deliveryFee: 0 }]) };
 }
 function mockGoogle() {
   const props = new Map([['EXPORT_FOLDER_ID', 'folder'], ['EXPORT_SECRET', 'test-secret']]);
@@ -85,8 +85,9 @@ test('backend + real Apps Script: preserve names, create yearly files, route pro
   const first = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
   assert.equal(first.rows[1][0], 'Nguyễn Văn A'); assert.equal(first.rows[1][1], '0977700000');
   assert.equal(first.rows[1][16], 'https://example.test/vc-cream.store');
+  assert.equal(first.rows[1][17], '3B5ggmZQg35w2QgJWnoZ21');
   assert.equal(first.rows[1][12], 878000); assert.equal(first.rows[2][12], 0);
-  assert.equal(first.rows[0][17], '_ExportRowId');
+  assert.equal(first.rows[0][18], '_ExportRowId');
   assert.equal((await exporter.exportOrdersToGoogleSheets(data)).success, true);
   assert.equal(first.rows.length, 3); assert.equal(google.files.size, 2); assert.equal(google.locks(), 0);
 });
@@ -156,13 +157,28 @@ test('old sheet upgrades URL column while preserving dedup keys and existing row
   const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
   await exporter.exportOrdersToGoogleSheets([order(1)]);
   const sheet = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
-  sheet.rows.forEach(row => row.splice(16, 1)); // Simulate the original 16-column layout.
+  sheet.rows.forEach(row => row.splice(16, 2)); // Simulate the original 16-column layout.
   const oldKey = sheet.rows[1][16];
   const result = await exporter.exportOrdersToGoogleSheets([order(1), order(2)]);
   assert.equal(result.success, true);
   assert.equal(sheet.rows.length, 5);
   assert.equal(sheet.rows[0][16], 'URL Landing Page');
-  assert.equal(sheet.rows[1][17], oldKey);
+  assert.equal(sheet.rows[1][18], oldKey);
   assert.equal(sheet.rows[1][16], '');
   assert.equal(sheet.rows[3][16], 'https://example.test/vc-cream.store');
+});
+
+
+test('URL layout upgrades xmlId column and retains deduplication', async () => {
+  settings(); const google = mockGoogle();
+  const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
+  await exporter.exportOrdersToGoogleSheets([order(1)]);
+  const sheet = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
+  sheet.rows.forEach(row => row.splice(17, 1));
+  const key = sheet.rows[1][17];
+  assert.equal((await exporter.exportOrdersToGoogleSheets([order(1), order(2)])).success, true);
+  assert.equal(sheet.rows.length, 5);
+  assert.equal(sheet.rows[0][17], 'xmlId');
+  assert.equal(sheet.rows[1][18], key);
+  assert.equal(sheet.rows[3][17], '3B5ggmZQg35w2QgJWnoZ21');
 });

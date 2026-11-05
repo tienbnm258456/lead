@@ -1,5 +1,4 @@
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
-import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
@@ -99,6 +98,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    if (true && (typeof body.xml_id !== 'string' || !body.xml_id.trim() || body.xml_id.trim().length > 255 || /[,\r\n]/.test(body.xml_id))) {
+      return NextResponse.json({ error: 'Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng' }, { status: 400 });
+    }
     if (body.variants !== undefined && (!Array.isArray(body.variants) || body.variants.length === 0 || body.variants.some((v: Record<string, unknown>) =>
       typeof v.label !== 'string' || !v.label.trim() ||
       typeof v.price !== 'number' || !Number.isFinite(v.price) || v.price < 0 ||
@@ -139,6 +141,7 @@ export async function POST(request: NextRequest) {
       const product = await tx.product.create({
         data: {
           name: pageName,
+          xml_id: body.xml_id.trim(),
           group_id: groupId,
           slug,
           has_sizes: !!body.has_sizes,
@@ -165,7 +168,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      await ensureOfferXmlIds(tx, await tx.productVariant.findMany({ where: { product_id: product.id, active: true } }));
 
       // 3. Create LandingPage
       const lp = await tx.landingPage.create({

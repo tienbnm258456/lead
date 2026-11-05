@@ -10,7 +10,7 @@ export async function processRetailCrmEvents() {
     try {
       const order = await tx.order.findUnique({ where: { external_id: event.external_id } });
       if (!order) throw new Error('Local order missing or previously purged');
-      const current = await getRetailCrmStatus(event.external_id);
+      const current = await getRetailCrmStatus(event.external_id, event.event_id);
       if (current.orderId !== event.order_id || (order.retailcrm_id !== null && String(order.retailcrm_id) !== current.orderId)) throw new Error('CRM order ID mismatch');
       const date = current.updatedAt ? new Date(current.updatedAt) : null;
       if (!date || !order.crm_status_updated_at || date >= order.crm_status_updated_at) {

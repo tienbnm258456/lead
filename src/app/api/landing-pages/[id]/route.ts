@@ -1,5 +1,4 @@
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
-import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
@@ -37,6 +36,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const body = await request.json();
+    if (body.xml_id !== undefined && (typeof body.xml_id !== 'string' || !body.xml_id.trim() || body.xml_id.trim().length > 255 || /[,\r\n]/.test(body.xml_id))) {
+      return NextResponse.json({ error: 'Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng' }, { status: 400 });
+    }
     if (body.variants !== undefined && (!Array.isArray(body.variants) || body.variants.length === 0 || body.variants.some((v: Record<string, unknown>) =>
       typeof v.label !== 'string' || !v.label.trim() ||
       typeof v.price !== 'number' || !Number.isFinite(v.price) || v.price < 0 ||
@@ -70,6 +72,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       // 1. Update landing page fields
       const updateLP: Record<string, unknown> = {};
       const updateProduct: Record<string, unknown> = {};
+      if (body.xml_id !== undefined) updateProduct.xml_id = body.xml_id.trim();
 
       if (body.name !== undefined) {
         updateLP.name = body.name.trim();
@@ -151,7 +154,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         }
       }
 
-      await ensureOfferXmlIds(tx, await tx.productVariant.findMany({ where: { product_id: existing.product_id, active: true } }));
 
       // 3. Return updated landing page
       return tx.landingPage.findUnique({

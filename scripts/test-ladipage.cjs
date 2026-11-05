@@ -52,7 +52,7 @@ test('webhook sends multiple sizes and holds only an unknown package', async () 
   for (const ambiguous of [false, true]) {
     let saved; let sent; let transaction = false;
     const prisma = {
-      landingPage: { findUnique: async () => ({ name: 'Landing', product: { ...product, slug: 'test', variants } }) },
+      landingPage: { findUnique: async () => ({ name: 'Landing', product: { ...product, xml_id: '3B5ggmZQg35w2QgJWnoZ21', slug: 'test', variants: variants.map((v,i) => ({...v, promotion: i === 0 ? '1+1' : '2+2'})) } }) },
       order: { create: async ({ data }) => { saved = data; return { id: 1 }; }, update: async () => ({}) },
       orderSyncLog: { create: async () => ({}) },
       $transaction: async () => { transaction = true; },
@@ -72,7 +72,7 @@ test('webhook sends multiple sizes and holds only an unknown package', async () 
     assert.equal(saved.url_page, "https://example.test/vc-cream.store");
     assert.deepEqual(JSON.parse(saved.items_json)[0].rawPayload, { ...body, url_page: "https://example.test/vc-cream.store" });
     if (ambiguous) { assert.equal(sent, undefined); assert.equal(saved.sync_status, 'FAILED'); assert.equal(response.body.requiresReview, true); }
-    else { assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
+    else { assert.deepEqual(sent.items.map(i => i.offer.xmlId), ['3B5ggmZQg35w2QgJWnoZ21, 1+1, S + L', '3B5ggmZQg35w2QgJWnoZ21, 2+2, S + L']); assert.equal(JSON.parse(saved.items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21'); assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
   }
 });
 
@@ -153,7 +153,7 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   const variant = { ...variants[1], id: 2, xml_id: 'XML0002_OFFER', promotion: '2+2', price: 610000, delivery_fee: 65000 };
   const prisma = {
     landingPage: { findUnique: async ({ where, include }) => where.id === 7 && include.product.include.variants.where.id === 2 ?
-      { product: { ...product, active: true, slug: 'test', variants: [variant] } } : null },
+      { product: { ...product, xml_id: '3B5ggmZQg35w2QgJWnoZ21', active: true, slug: 'test', variants: [variant] } } : null },
     order: { create: async ({ data }) => { saved = data; return { id: 11, ...data }; }, update: async () => ({}) },
     orderSyncLog: { create: async () => ({}) }, $transaction: async () => [],
   };
@@ -168,7 +168,7 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   const result = await route.POST({ json: async () => body });
   assert.equal(result.status, 201);
   assert.equal(result.body.data.external_id, 'MAN-00011');
-  assert.equal(sent.items[0].offer.xmlId, 'XML0002, 2+2, S');
+  assert.equal(sent.items[0].offer.xmlId, '3B5ggmZQg35w2QgJWnoZ21, 2+2, S');
   assert.equal(sent.items[0].initialPrice, 610);
   assert.equal(sent.items[0].quantity, 1);
   assert.equal(sent.delivery.cost, 65);

@@ -66,7 +66,7 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
     }
     if (candidates.length !== 1) throw new SelectionError('Gói chưa được cấu hình duy nhất: ' + label);
     const variant = candidates[0];
-    const xmlId = variant.xml_id?.trim() || generateOfferXmlId(variant.id);
+    const xmlId = product.xml_id?.trim() || variant.xml_id?.trim() || generateOfferXmlId(variant.id);
     return { variant, xmlId };
   });
   const deliveryFee = Math.max(0, ...matches.map(m => m.variant.delivery_fee));
