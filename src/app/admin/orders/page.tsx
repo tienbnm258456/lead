@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CrmStatusBadge } from '@/components/crm-status-badge';
+import { CRM_STATUS_GROUPS, type CrmStatusGroup } from '@/lib/crm-status-display';
 import { queryScope } from '@/lib/query-scope';
 import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
 
@@ -74,6 +75,9 @@ interface OrdersResponse {
 }
 
 interface OrderFilters {
+  groupId?: string;
+  xmlId?: string;
+  crmStatusGroup?: string;
   search?: string;
   status?: string;
   landingSlug?: string;
@@ -107,6 +111,9 @@ async function fetchOrders(filters: OrderFilters): Promise<OrdersResponse> {
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
   if (filters.search) params.set('search', filters.search);
   if (filters.status) params.set('status', filters.status);
+  if (filters.crmStatusGroup) params.set('crmStatusGroup', filters.crmStatusGroup);
+  if (filters.groupId) params.set('groupId', filters.groupId);
+  if (filters.xmlId) params.set('xmlId', filters.xmlId);
   if (filters.landingSlug) params.set('landingSlug', filters.landingSlug);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
@@ -132,6 +139,17 @@ export default function OrdersPage() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [searchInput, setSearchInput] = useState('');
+  const [xmlIdInput, setXmlIdInput] = useState('');
+  const { data: filterOptions } = useQuery<{
+    groups: { id: number; name: string; display_name: string }[];
+  }>({
+    queryKey: ['order-filter-options', viewerScope], enabled: viewerScope !== null,
+    queryFn: async () => {
+      const response = await fetch('/api/orders/filter-options');
+      if (!response.ok) throw new Error('Không tải được danh sách nhóm và quản lý');
+      return response.json();
+    },
+  });
   const [showForm, setShowForm] = useState(false);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
@@ -313,6 +331,9 @@ export default function OrdersPage() {
       // Pass current filters for filtered export
       if (filters.search) params.set('search', filters.search);
       if (filters.status) params.set('status', filters.status);
+      if (filters.crmStatusGroup) params.set('crmStatusGroup', filters.crmStatusGroup);
+      if (filters.groupId) params.set('groupId', filters.groupId);
+      if (filters.xmlId) params.set('xmlId', filters.xmlId);
       if (filters.landingSlug) params.set('landingSlug', filters.landingSlug);
       if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.set('dateTo', filters.dateTo);
@@ -388,7 +409,11 @@ export default function OrdersPage() {
   };
 
   // Get the active filter count to show on the filter button
-  const activeFilterCount = [filters.status, filters.landingSlug, filters.dateFrom, filters.dateTo, filters.exportStatus].filter(Boolean).length;
+  const activeFilterCount = [filters.status, filters.crmStatusGroup, filters.groupId, filters.xmlId, filters.landingSlug, filters.dateFrom, filters.dateTo, filters.exportStatus].filter(Boolean).length;
+  const clearFilters = () => {
+    setXmlIdInput('');
+    setFilters(p => ({ ...p, status: '', crmStatusGroup: '', groupId: '', xmlId: '', landingSlug: '', dateFrom: '', dateTo: '', exportStatus: '', page: 1 }));
+  };
 
   const btnBase = "flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all";
 
@@ -482,7 +507,7 @@ export default function OrdersPage() {
             </div>
             {/* Status filter */}
             <div>
-              <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Trạng thái</label>
+              <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Trạng thái đồng bộ CRM</label>
               <select
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
@@ -492,7 +517,31 @@ export default function OrdersPage() {
                 {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
-            {/* Date from */}
+            {/* CRM order status group filter */}
+            <div>
+              <label htmlFor="order-group" className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Nhóm tài khoản</label>
+              <select id="order-group" className="w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }} value={filters.groupId || ''} onChange={e => setFilters(p => ({ ...p, groupId: e.target.value, page: 1 }))}>
+                <option value="">Tất cả nhóm được phép xem</option>
+                {filterOptions?.groups.map(group => <option key={group.id} value={group.id}>{group.display_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="order-xml-id" className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>XML ID sản phẩm trong đơn</label>
+              <form className="flex gap-2" onSubmit={e => { e.preventDefault(); setFilters(p => ({ ...p, xmlId: xmlIdInput.trim(), page: 1 })); }}>
+                <input id="order-xml-id" className="min-w-0 w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }} placeholder="Nhập XML ID chính xác" maxLength={255} value={xmlIdInput} onChange={e => setXmlIdInput(e.target.value)} />
+                <button type="submit" className="rounded-lg border px-2 text-xs" style={{ borderColor: 'var(--border)' }}>Lọc</button>
+              </form>
+            </div>
+            <div>
+              <label htmlFor="crm-status-group" className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Nhóm trạng thái đơn hàng CRM</label>
+              <select id="crm-status-group" className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                value={filters.crmStatusGroup || ''}
+                onChange={e => setFilters(p => ({ ...p, crmStatusGroup: e.target.value, page: 1 }))}>
+                <option value="">Tất cả nhóm</option>
+                {Object.entries(CRM_STATUS_GROUPS).map(([code, group]) => <option key={code} value={code}>{group.label}</option>)}
+              </select>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Từ ngày</label>
               <input
@@ -532,7 +581,7 @@ export default function OrdersPage() {
             {activeFilterCount > 0 && (
               <div className="col-span-full flex justify-end">
                 <button
-                  onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', exportStatus: '', page: 1 }))}
+                  onClick={clearFilters}
                   className="text-xs font-medium text-indigo-500 hover:text-indigo-400 transition-colors"
                 >
                   Xóa tất cả bộ lọc
@@ -544,7 +593,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Active filter tags */}
-      {(filters.landingSlug || filters.status || filters.dateFrom || filters.dateTo || filters.exportStatus) && (
+      {activeFilterCount > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Đang lọc:</span>
           {filters.landingSlug && (
@@ -557,12 +606,20 @@ export default function OrdersPage() {
           )}
           {filters.status && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
-              Trạng thái: {statusOptions.find(s => s.value === filters.status)?.label}
+              Đồng bộ CRM: {statusOptions.find(s => s.value === filters.status)?.label}
               <button onClick={() => setFilters(p => ({ ...p, status: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
                 <X className="h-3 w-3" />
               </button>
             </span>
           )}
+          {filters.crmStatusGroup && <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+            Đơn hàng CRM: {CRM_STATUS_GROUPS[filters.crmStatusGroup as CrmStatusGroup]?.label}
+            <button aria-label="Bỏ lọc nhóm trạng thái CRM" onClick={() => setFilters(p => ({ ...p, crmStatusGroup: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5"><X className="h-3 w-3" /></button>
+          </span>}
+          {(['groupId', 'xmlId'] as const).filter(key => filters[key]).map(key => <span key={key} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
+            {key === 'groupId' ? `Nhóm: ${filterOptions?.groups.find(group => String(group.id) === filters.groupId)?.display_name || filters.groupId}` : `XML ID: ${filters.xmlId}`}
+            <button aria-label={`Bỏ lọc ${key}`} onClick={() => { setFilters(p => ({ ...p, [key]: '', page: 1 })); if (key === 'xmlId') setXmlIdInput(''); }} className="ml-0.5 rounded-full p-0.5"><X className="h-3 w-3" /></button>
+          </span>)}
           {filters.dateFrom && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
               Từ: {filters.dateFrom}
@@ -588,7 +645,7 @@ export default function OrdersPage() {
             </span>
           )}
           <button
-            onClick={() => setFilters(p => ({ ...p, status: '', landingSlug: '', dateFrom: '', dateTo: '', exportStatus: '', page: 1 }))}
+            onClick={clearFilters}
             className="text-xs font-medium text-red-500 hover:text-red-400 transition-colors"
           >
             Xóa tất cả

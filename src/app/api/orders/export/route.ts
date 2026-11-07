@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { requireAuth } from '@/lib/require-auth';
+import { orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
+import { orderIdsForXmlId } from '@/lib/order-xml-filter';
 
 /**
  * GET /api/orders/export
@@ -34,6 +36,9 @@ export async function GET(request: NextRequest) {
 
     // ── Build Prisma where clause ──
     const where: Prisma.OrderWhereInput = { ...dataScope(auth.user) };
+    where.AND = [orderFilterWhere(searchParams)];
+    const xmlId = orderXmlId(searchParams);
+    if (xmlId) where.id = { in: await orderIdsForXmlId(xmlId, auth.user) };
 
     if (search) {
       where.OR = [
@@ -275,6 +280,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof OrderFilterError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Export error:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }

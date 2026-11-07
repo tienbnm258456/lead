@@ -158,6 +158,8 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
     orderSyncLog: { create: async () => ({}) }, $transaction: async () => [],
   };
   const route = load('src/app/api/orders/route.ts', {
+    '@/lib/order-filters': {}, '@/lib/order-xml-filter': {},
+    '@/lib/crm-status-display': load('src/lib/crm-status-display.ts'),
     '@/lib/ladipage-order': helpers, '@/lib/permissions': load('src/lib/permissions.ts'), '@/lib/prisma': { prisma },
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
     '@/lib/retailcrm': { createRetailCrmOrder: async payload => { sent = crm.buildOrderPayload(payload); return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 99 } }; } },

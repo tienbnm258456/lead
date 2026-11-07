@@ -225,7 +225,7 @@ export default function LandingPagesPage() {
 
   const handleSubmit = () => {
     const invalidPromotion = formVariants.findIndex(v => !v.promotion.trim() || v.promotion.trim().length > 100);
-    if (invalidPromotion >= 0) { toast.error('Gói ' + (invalidPromotion + 1) + ': Vui lòng nhập thông tin khuyến mại, ví dụ 1+1 hoặc 2+2 (tối đa 100 ký tự)'); return; }
+    if (invalidPromotion >= 0) { toast.error('Gói ' + (invalidPromotion + 1) + ': Vui lòng nhập mã khuyến mại, ví dụ 1+1, 2+2 hoặc 1PLUS1, 2PLUS2 (tối đa 100 ký tự)'); return; }
     const variants: Variant[] = formVariants.map(v => ({
       id: v.id,
       label: v.label,
@@ -561,9 +561,9 @@ export default function LandingPagesPage() {
                         value={v.label} onChange={e => updateVariant(idx, 'label', e.target.value)} />
                       <label className="block text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Thông tin khuyến mại <span className="text-red-500">*</span>
                         <input required aria-required="true" aria-describedby={`promotion-help-${idx}`} aria-label={`Thông tin khuyến mại gói ${idx + 1}`} maxLength={100} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                          placeholder="VD: 1+1 (mua 1 tặng 1), 2+2 (mua 2 tặng 2)" value={v.promotion} onChange={e => updateVariant(idx, 'promotion', e.target.value)} />
+                          placeholder="VD: 1+1, 2+2 hoặc 1PLUS1, 2PLUS2" value={v.promotion} onChange={e => updateVariant(idx, 'promotion', e.target.value)} />
                         <span id={`promotion-help-${idx}`} className="mt-1.5 block text-xs font-normal leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
-                          Nhập mã khuyến mại của gói đã thống nhất với đối tác: <strong>1+1</strong> = mua 1 tặng 1, <strong>2+2</strong> = mua 2 tặng 2. Chỉ nhập mã, không nhập phần giải thích hoặc giá tiền.
+                          Nhập đúng mã khuyến mại đã thống nhất với đối tác: <strong>1+1</strong>, <strong>2+2</strong> hoặc <strong>1PLUS1</strong>, <strong>2PLUS2</strong>. Chỉ nhập mã, không nhập phần giải thích hoặc giá tiền.
                           Mã này được ghép với XML ID sản phẩm và size/tùy chọn để CRM nhận diện đúng gói khách đặt.
                         </span>
                       </label>

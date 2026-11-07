@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
 import { requireAuth } from '@/lib/require-auth';
+import { orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
+import { orderIdsForXmlId } from '@/lib/order-xml-filter';
 
 /**
  * GET /api/orders
@@ -29,6 +31,9 @@ export async function GET(request: NextRequest) {
 
     // Build where clause
     const where: Record<string, unknown> = { ...dataScope(auth.user) };
+    where.AND = [orderFilterWhere(searchParams)];
+    const xmlId = orderXmlId(searchParams);
+    if (xmlId) where.id = { in: await orderIdsForXmlId(xmlId, auth.user) };
 
     if (search) {
       where.OR = [
@@ -118,6 +123,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
+    if (error instanceof OrderFilterError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error fetching orders:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

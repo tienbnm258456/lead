@@ -38,6 +38,10 @@ export const CRM_STATUS_GROUPS = {
   }
 } as const;
 export type CrmStatusGroup = keyof typeof CRM_STATUS_GROUPS;
+export function getCrmStatusCodesForGroup(group: string): string[] | null {
+  if (!Object.hasOwn(CRM_STATUS_GROUPS, group)) return null;
+  return Object.entries(CRM_STATUS_MAPPING).filter(([, status]) => status.group === group).map(([code]) => code);
+}
 export interface CrmStatusDisplay { code: string | null; label: string; description: string; group: CrmStatusGroup | null; groupLabel: string; color: string; known: boolean }
 export const CRM_STATUS_MAPPING: Record<string, { group: CrmStatusGroup; label: string; description: string }> = {
   "goriachii": {
