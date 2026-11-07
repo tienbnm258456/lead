@@ -28,6 +28,7 @@ import { formatDisplayNumber, formatDashboardDate } from '@/lib/display-format';
 
 // ── Types ──
 interface DashboardChartsProps {
+  amounts: { total: string; completed: string; other: string; cancelled: string };
   stats: {
     total: number;
     todayCount: number;
@@ -65,6 +66,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 
 export default function DashboardCharts({
   stats,
+  amounts,
   dailyOrders,
   statusDistribution,
   topLandingPages,
@@ -105,6 +107,12 @@ export default function DashboardCharts({
       ring: 'ring-emerald-500/10',
     },
   ];
+  const amountCards = [
+    { title: 'Tổng tiền tất cả đơn hàng', value: amounts.total, description: 'Toàn bộ đơn hàng' },
+    { title: 'Tổng tiền đơn hoàn thành', value: amounts.completed, description: 'Nhóm trạng thái CRM Hoàn thành' },
+    { title: 'Tổng tiền đơn khác hoàn thành', value: amounts.other, description: 'Gồm hủy / hoàn và chưa có trạng thái CRM' },
+    { title: 'Tổng tiền đơn hủy / hoàn hàng', value: amounts.cancelled, description: 'Nhóm trạng thái CRM Hủy / hoàn hàng' },
+  ];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -137,6 +145,20 @@ export default function DashboardCharts({
           </div>
         ))}
       </div>
+
+      <section aria-label="Tổng tiền đơn hàng" className="space-y-3">
+        <p className="text-caption">Tổng tiền toàn thời gian · gồm phí vận chuyển · UZS</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {amountCards.map(card => <div key={card.title} className="card-elevated min-w-0 p-5">
+            <p className="text-caption">{card.title}</p>
+            <p className="mt-2 break-words text-xl font-semibold tabular-nums" style={{ color: 'var(--foreground)' }}>
+              {new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(card.value as `${number}`)}
+              <span className="ml-1 text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>UZS</span>
+            </p>
+            <p className="text-caption mt-2">{card.description}</p>
+          </div>)}
+        </div>
+      </section>
 
       {/* ── Charts Row ── */}
       <div className="grid gap-4 lg:grid-cols-3">

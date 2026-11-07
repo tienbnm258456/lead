@@ -2,7 +2,8 @@ import { groupDashboardCrmStatuses } from '@/lib/dashboard-crm-groups';
 import { requireAuth } from '@/lib/require-auth';
 import { dataScope } from '@/lib/permissions';
 import { redirect } from 'next/navigation';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { getCrmStatusDisplay } from '@/lib/crm-status-display';
 import { prisma } from '@/lib/prisma';
 import DashboardCharts from '@/components/dashboard-charts';
 
@@ -13,11 +14,25 @@ async function getOverview(scope: Prisma.OrderWhereInput) {
   const [total, todayCount, rawStatuses] = await Promise.all([
     prisma.order.count({ where: scope }),
     prisma.order.count({ where: { ...scope, created_at: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
-    prisma.order.groupBy({ by: ['crm_status'], where: scope, _count: { id: true } }),
+    prisma.order.groupBy({ by: ['crm_status'], where: scope, _count: { id: true }, _sum: { total_price: true } }),
   ]);
   const statusDistribution = groupDashboardCrmStatuses(rawStatuses);
   const count = (key: string) => statusDistribution.find(group => group.key === key)?.value || 0;
-  return { stats: { total, todayCount, processingCount: count('processing'), completedCount: count('completed') }, statusDistribution };
+  let totalAmount = new Prisma.Decimal(0);
+  let completedAmount = new Prisma.Decimal(0);
+  let cancelledAmount = new Prisma.Decimal(0);
+  for (const row of rawStatuses) {
+    const amount = row._sum.total_price ?? new Prisma.Decimal(0);
+    totalAmount = totalAmount.plus(amount);
+    const group = getCrmStatusDisplay(row.crm_status).group;
+    if (group === 'completed') completedAmount = completedAmount.plus(amount);
+    if (group === 'cancelled') cancelledAmount = cancelledAmount.plus(amount);
+  }
+  const amounts = {
+    total: totalAmount.toString(), completed: completedAmount.toString(),
+    other: totalAmount.minus(completedAmount).toString(), cancelled: cancelledAmount.toString(),
+  };
+  return { stats: { total, todayCount, processingCount: count('processing'), completedCount: count('completed') }, amounts, statusDistribution };
 }
 
 async function getDailyOrders(scope: Prisma.OrderWhereInput) {
@@ -113,6 +128,7 @@ export default async function AdminDashboard() {
   return (
     <DashboardCharts
       stats={overview.stats}
+      amounts={overview.amounts}
       dailyOrders={dailyOrders}
       statusDistribution={overview.statusDistribution}
       topLandingPages={topLandingPages}
