@@ -19,8 +19,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const page = Number(searchParams.get('page') || '1');
+    const requestedPageSize = Number(searchParams.get('pageSize') || '50');
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(requestedPageSize) || requestedPageSize < 1) {
+      return NextResponse.json({ error: 'Trang và số bản ghi mỗi trang phải là số nguyên dương' }, { status: 400 });
+    }
+    const pageSize = Math.min(requestedPageSize, 200);
+    if (!Number.isSafeInteger((page - 1) * pageSize)) return NextResponse.json({ error: 'Số trang không hợp lệ' }, { status: 400 });
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const landingSlug = searchParams.get('landingSlug') || '';

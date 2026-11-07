@@ -133,7 +133,7 @@ export default function OrdersPage() {
   useEffect(() => { fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(user => { setCurrentRole(user.role); setViewerScope(queryScope(user)); }).catch(() => window.location.replace('/login')); }, []);
   const [filters, setFilters] = useState<OrderFilters>({
     page: 1,
-    pageSize: 10,
+    pageSize: 50,
     sortBy: 'created_at',
     sortOrder: 'desc',
   });
@@ -883,10 +883,19 @@ export default function OrdersPage() {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between border-t px-5 py-3.5" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: 'var(--border)' }}>
           <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
             Trang <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{filters.page}</span> / {totalPages} · {total} đơn hàng
           </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+              Bản ghi/trang
+              <select className="rounded-lg border px-2 py-1.5 text-sm" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                value={filters.pageSize || 50}
+                onChange={e => { setFilters(p => ({ ...p, pageSize: Number(e.target.value), page: 1 })); setSelectedIds(new Set()); }}>
+                {[10, 50, 100, 200].map(size => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </label>
           <div className="flex items-center gap-1.5">
             <button
               disabled={filters.page === 1}
@@ -918,6 +927,7 @@ export default function OrdersPage() {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+          </div>
           </div>
         </div>
       </div>
