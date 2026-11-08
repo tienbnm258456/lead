@@ -98,8 +98,8 @@ export function OrderDetailsDialog({ order, landingPageName, onClose }: {
       <section>
         <h3 className="mb-3 font-semibold">Thông tin đơn hàng</h3>
         <dl className="grid gap-4 sm:grid-cols-2">
-          <Field label="Landing Page" value={landingPageName || order.landing_slug} />
-          <div className="sm:col-span-2"><Field label="URL Landing Page" value={order.url_page} /></div>
+          <Field label="Sản phẩm" value={landingPageName || order.landing_slug} />
+          <div className="sm:col-span-2"><Field label="URL Sản phẩm" value={order.url_page} /></div>
           <Field label="Nguồn đơn" value={order.source} />
           <div className="sm:col-span-2"><Field label="Gói sản phẩm đã chọn" value={order.selected_package} /></div>
           <div className="sm:col-span-2"><Field label="Size / tùy chọn đã chọn" value={order.selected_size} /></div>

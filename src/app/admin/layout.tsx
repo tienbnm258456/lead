@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 export const metadata = {
   title: 'Admin - Lead Management',
-  description: 'Quản lý Lead từ Landing Page',
+  description: 'Quản lý Lead từ Sản phẩm',
 };
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

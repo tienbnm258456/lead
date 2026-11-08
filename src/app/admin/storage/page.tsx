@@ -285,7 +285,7 @@ export default function StoragePage() {
                 products: 'Sản phẩm',
                 product_variants: 'Gói SP',
                 product_sizes: 'Tùy chọn',
-                landing_pages: 'Landing Pages',
+                landing_pages: 'Sản phẩm',
               };
               return (
                 <div key={table.name} className="flex items-center gap-3 text-xs">

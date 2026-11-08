@@ -131,7 +131,7 @@ export default function LandingPagesPage() {
       if (!res.ok) { const err = await res.json(); throw new Error(err.details?.join(', ') || err.error); }
       return res.json();
     },
-    onSuccess: () => { toast.success('Tạo Landing Page thành công!'); closeForm(); queryClient.invalidateQueries({ queryKey: ['landing-pages'] }); },
+    onSuccess: () => { toast.success('Tạo sản phẩm thành công!'); closeForm(); queryClient.invalidateQueries({ queryKey: ['landing-pages'] }); },
     onError: (err: Error) => toast.error(err.message),
   });
 
@@ -310,13 +310,13 @@ export default function LandingPagesPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>Quản lý Landing Page</h1>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>Quản lý sản phẩm</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
-            Đăng ký trang LadiPage, cấu hình sản phẩm & gói giá ({pages.length} trang)
+            Cấu hình sản phẩm & gói giá ({pages.length} sản phẩm)
           </p>
         </div>
         <button onClick={openCreateForm} className={btnBase + ' bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl'}>
-          <Plus className="h-4 w-4" /> Thêm Landing Page
+          <Plus className="h-4 w-4" /> Thêm sản phẩm
         </button>
       </div>
 
@@ -349,10 +349,10 @@ export default function LandingPagesPage() {
       ) : pages.length === 0 ? (
         <div className="rounded-xl border p-16 text-center" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
           <Globe className="mx-auto h-12 w-12 mb-4" style={{ color: 'var(--muted-foreground)' }} />
-          <p className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>Chưa có Landing Page nào</p>
-          <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>Thêm trang đầu tiên để bắt đầu nhận đơn hàng</p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>Chưa có sản phẩm nào</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>Thêm sản phẩm đầu tiên để bắt đầu nhận đơn hàng</p>
           <button onClick={openCreateForm} className={btnBase + ' mx-auto mt-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white'}>
-            <Plus className="h-4 w-4" /> Thêm Landing Page
+            <Plus className="h-4 w-4" /> Thêm sản phẩm
           </button>
         </div>
       ) : (
@@ -477,7 +477,7 @@ export default function LandingPagesPage() {
               {/* Delete overlay */}
               {showDeleteConfirm === page.id && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/60 backdrop-blur-sm animate-fade-in z-10">
-                  <p className="text-sm font-semibold text-white mb-1">Xóa Landing Page này?</p>
+                  <p className="text-sm font-semibold text-white mb-1">Xóa sản phẩm này?</p>
                   <p className="text-xs text-white/70 mb-4">Ngừng nhận webhook, giữ nguyên lịch sử đơn hàng</p>
                   <div className="flex gap-2">
                     <button onClick={() => setShowDeleteConfirm(null)} className="rounded-lg border border-white/30 px-4 py-1.5 text-sm text-white hover:bg-white/10">Hủy</button>
@@ -504,10 +504,10 @@ export default function LandingPagesPage() {
             {/* ── Header (fixed) ── */}
             <div className="shrink-0 px-7 pt-7 pb-4">
               <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>
-                {editItem ? 'Sửa Landing Page' : 'Thêm Landing Page mới'}
+                {editItem ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}
               </h2>
               <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                Cấu hình trang, gói sản phẩm & giá. API Key tạo tự động.
+                Cấu hình sản phẩm, gói mua & giá. API Key tạo tự động.
               </p>
             </div>
 
@@ -524,11 +524,11 @@ export default function LandingPagesPage() {
                 <select className="mt-2 w-full rounded-lg border p-3" style={{ background: 'var(--card)', color: 'var(--foreground)' }} value={formGroup} onChange={e => setFormGroup(e.target.value)}>
                   <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id} disabled={!group.assignable}>{group.display_name}{!group.assignable ? ' (không có Quản lý hoạt động)' : ''}</option>)}
                 </select>
-                <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>Đổi nhóm sẽ chuyển Landing Page và toàn bộ đơn hàng liên quan sang nhóm mới.</span>
+                <span className="mt-1 block text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>Đổi nhóm sẽ chuyển sản phẩm và toàn bộ đơn hàng liên quan sang nhóm mới.</span>
               </label>}
               {/* Name */}
               <div>
-                <label className="mb-2 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tên trang / Sản phẩm <span className="text-red-500">*</span></label>
+                <label className="mb-2 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tên sản phẩm <span className="text-red-500">*</span></label>
                 <input className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   placeholder="VD: Đai lưng, Kem tẩy lông..."

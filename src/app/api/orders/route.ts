@@ -7,6 +7,7 @@ import { OrderSyncStatus } from '@prisma/client';
 import { requireAuth } from '@/lib/require-auth';
 import { orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
 import { orderIdsForXmlId } from '@/lib/order-xml-filter';
+import { sumOrderAmounts } from '@/lib/order-amounts';
 
 /**
  * GET /api/orders
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
 
     // Fetch orders + total + distinct landing pages (for filter dropdown)
-    const [data, total, landingPages] = await Promise.all([
+    const [data, total, landingPages, amountGroups] = await Promise.all([
       prisma.order.findMany({
         where,
         orderBy: { [safeSortBy]: sortOrder },
@@ -96,6 +97,8 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { name: 'asc' },
       }),
+      // All matching orders; pagination applies only to findMany above.
+      prisma.order.groupBy({ by: ['crm_status'], where, _sum: { total_price: true } }),
     ]);
 
     // Parse delivery_fee từ items_json để tách giá SP và phí ship
@@ -118,6 +121,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: ordersWithFee,
       total,
+      amounts: sumOrderAmounts(amountGroups),
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
@@ -162,7 +166,7 @@ export async function POST(request: Request) {
         const url = new URL(url_page);
         if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
       } catch {
-        return NextResponse.json({ error: 'URL Landing Page không hợp lệ. Vui lòng nhập URL http:// hoặc https://' }, { status: 400 });
+        return NextResponse.json({ error: 'URL sản phẩm không hợp lệ. Vui lòng nhập URL http:// hoặc https://' }, { status: 400 });
       }
     }
 
@@ -173,14 +177,14 @@ export async function POST(request: Request) {
     const landingPageId = Number(body.landing_page_id);
     const variantId = Number(body.variant_id);
     if (!Number.isInteger(landingPageId) || landingPageId <= 0 || !Number.isInteger(variantId) || variantId <= 0) {
-      return NextResponse.json({ error: 'Vui lòng chọn Landing Page và gói sản phẩm' }, { status: 400 });
+      return NextResponse.json({ error: 'Vui lòng chọn sản phẩm và gói sản phẩm' }, { status: 400 });
     }
     const page = await prisma.landingPage.findUnique({
       where: { id: landingPageId, active: true, ...landingScope(auth.user) },
       include: { product: { include: { variants: { where: { id: variantId, active: true } } } } },
     });
     if (!page || !page.product.active || page.product.variants.length !== 1) {
-      return NextResponse.json({ error: 'Gói sản phẩm không thuộc Landing Page hoặc đã ngừng hoạt động' }, { status: 400 });
+      return NextResponse.json({ error: 'Gói sản phẩm không thuộc sản phẩm hoặc đã ngừng hoạt động' }, { status: 400 });
     }
     const configured = page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants);
     const resolved = resolveLandingItems(configured.map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),

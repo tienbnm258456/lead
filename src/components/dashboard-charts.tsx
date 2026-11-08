@@ -20,9 +20,11 @@ import {
   PackagePlus,
   Clock,
   CheckCircle2,
+  XCircle,
   Globe,
   Activity,
 } from 'lucide-react';
+import { OrderAmountCards } from '@/components/order-amount-cards';
 import { dashboardCrmGroup } from '@/lib/dashboard-crm-groups';
 import { formatDisplayNumber, formatDashboardDate } from '@/lib/display-format';
 
@@ -34,6 +36,7 @@ interface DashboardChartsProps {
     todayCount: number;
     processingCount: number;
     completedCount: number;
+    cancelledCount: number;
   };
   dailyOrders: { date: string; count: number; revenue: number }[];
   statusDistribution: { name: string; value: number; color: string }[];
@@ -91,7 +94,7 @@ export default function DashboardCharts({
       ring: 'ring-emerald-500/10',
     },
     {
-      title: 'Nhóm đang xử lý',
+      title: 'Đơn đang xử lý',
       value: stats.processingCount,
       icon: Clock,
       gradient: 'from-amber-500 to-orange-600',
@@ -99,19 +102,17 @@ export default function DashboardCharts({
       ring: 'ring-amber-500/10',
     },
     {
-      title: 'Nhóm hoàn thành',
+      title: 'Đơn giao thành công',
       value: stats.completedCount,
       icon: CheckCircle2,
       gradient: 'from-emerald-500 to-green-600',
       shadow: 'shadow-emerald-500/15',
       ring: 'ring-emerald-500/10',
     },
-  ];
-  const amountCards = [
-    { title: 'Tổng tiền tất cả đơn hàng', value: amounts.total, description: 'Toàn bộ đơn hàng' },
-    { title: 'Tổng tiền đơn hoàn thành', value: amounts.completed, description: 'Nhóm trạng thái CRM Hoàn thành' },
-    { title: 'Tổng tiền đơn khác hoàn thành', value: amounts.other, description: 'Gồm hủy / hoàn và chưa có trạng thái CRM' },
-    { title: 'Tổng tiền đơn hủy / hoàn hàng', value: amounts.cancelled, description: 'Nhóm trạng thái CRM Hủy / hoàn hàng' },
+    {
+      title: 'Đơn hoàn/hủy', value: stats.cancelledCount, icon: XCircle,
+      gradient: 'from-rose-500 to-red-600', shadow: 'shadow-rose-500/15', ring: 'ring-rose-500/10',
+    },
   ];
 
   return (
@@ -123,7 +124,7 @@ export default function DashboardCharts({
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map((card) => (
           <div
             key={card.title}
@@ -146,19 +147,7 @@ export default function DashboardCharts({
         ))}
       </div>
 
-      <section aria-label="Tổng tiền đơn hàng" className="space-y-3">
-        <p className="text-caption">Tổng tiền toàn thời gian · gồm phí vận chuyển · UZS</p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {amountCards.map(card => <div key={card.title} className="card-elevated min-w-0 p-5">
-            <p className="text-caption">{card.title}</p>
-            <p className="mt-2 break-words text-xl font-semibold tabular-nums" style={{ color: 'var(--foreground)' }}>
-              {new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(card.value as `${number}`)}
-              <span className="ml-1 text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>UZS</span>
-            </p>
-            <p className="text-caption mt-2">{card.description}</p>
-          </div>)}
-        </div>
-      </section>
+      <OrderAmountCards amounts={amounts} caption="Tổng tiền toàn thời gian" />
 
       {/* ── Charts Row ── */}
       <div className="grid gap-4 lg:grid-cols-3">
@@ -282,14 +271,14 @@ export default function DashboardCharts({
 
       {/* ── Bottom Row ── */}
       <div className="grid gap-4 lg:grid-cols-5">
-        {/* Bar Chart — Top Landing Pages */}
+        {/* Bar Chart — Sản phẩm có nhiều đơn nhất */}
         <div className="lg:col-span-2 card-elevated p-5">
           <div className="mb-4">
             <h2 className="text-section-heading flex items-center gap-2">
               <Globe className="h-4 w-4 text-indigo-500" />
-              Top Landing Pages
+              Sản phẩm có nhiều đơn nhất
             </h2>
-            <p className="text-caption mt-0.5">Số đơn hàng theo Landing Page</p>
+            <p className="text-caption mt-0.5">Số đơn hàng theo sản phẩm</p>
           </div>
 
           <div className="h-[240px]">

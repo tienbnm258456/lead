@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Lead Admin - Quản lý Data Lead",
-  description: "Hệ thống quản lý Lead/Data thu thập từ Landing Page",
+  description: "Hệ thống quản lý Lead/Data thu thập từ Sản phẩm",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

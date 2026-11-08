@@ -13,6 +13,8 @@ import { CrmStatusBadge } from '@/components/crm-status-badge';
 import { CRM_STATUS_GROUPS, type CrmStatusGroup } from '@/lib/crm-status-display';
 import { queryScope } from '@/lib/query-scope';
 import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
+import { OrderAmountCards } from '@/components/order-amount-cards';
+import type { OrderAmounts } from '@/lib/order-amounts';
 
 interface Order extends OrderDetailData {
   id: number;
@@ -66,6 +68,7 @@ interface FormLandingPage {
 }
 
 interface OrdersResponse {
+  amounts: OrderAmounts;
   data: Order[];
   total: number;
   page: number;
@@ -387,7 +390,7 @@ export default function OrdersPage() {
 
   const columns = [
     { key: 'external_id', label: 'Mã đơn' },
-    { key: 'landing_slug', label: 'Landing Page' },
+    { key: 'landing_slug', label: 'Sản phẩm' },
     { key: 'customer_name', label: 'Khách hàng' },
     { key: 'customer_phone', label: 'SĐT' },
     { key: 'delivery_address', label: 'Địa chỉ', noSort: true },
@@ -396,7 +399,7 @@ export default function OrdersPage() {
     { key: 'total_price', label: 'Tổng tiền' },
     { key: 'selected_package', label: 'Gói SP', noSort: true },
     { key: 'selected_size', label: 'Tùy chọn', noSort: true },
-    { key: 'url_page', label: 'URL Landing Page', noSort: true },
+    { key: 'url_page', label: 'URL Sản phẩm', noSort: true },
     { key: 'sync_status', label: 'TRẠNG THÁI ĐỒNG BỘ RetailCRM' },
     { key: 'crm_status', label: 'Trạng thái đơn hàng CRM', noSort: true },
     { key: 'created_at', label: 'Ngày tạo' },
@@ -445,6 +448,9 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      <OrderAmountCards amounts={data?.amounts} loading={isFetching}
+        caption={`Tổng tiền theo bộ lọc · ${data?.total ?? 0} đơn khớp điều kiện`} />
+
       {/* Search + Filter bar */}
       <div className="rounded-xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
         <div className="flex flex-wrap items-center gap-3">
@@ -488,16 +494,16 @@ export default function OrdersPage() {
         {/* Extended filters */}
         {showFilters && (
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-t pt-4 animate-fade-in" style={{ borderColor: 'var(--border)' }}>
-            {/* Landing Page filter */}
+            {/* Sản phẩm filter */}
             <div>
-              <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Landing Page</label>
+              <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted-foreground)' }}>Sản phẩm</label>
               <select
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                 value={filters.landingSlug || ''}
                 onChange={e => setFilters(p => ({ ...p, landingSlug: e.target.value, page: 1 }))}
               >
-                <option value="">Tất cả trang</option>
+                <option value="">Tất cả sản phẩm</option>
                 {landingPages.map(lp => (
                   <option key={lp.slug} value={lp.slug}>
                     {lp.name} ({lp.productName})
@@ -598,7 +604,7 @@ export default function OrdersPage() {
           <span className="text-xs font-medium" style={{ color: 'var(--muted-foreground)' }}>Đang lọc:</span>
           {filters.landingSlug && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium" style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}>
-              Landing: {landingPageMap.get(filters.landingSlug)?.name || filters.landingSlug}
+              Sản phẩm: {landingPageMap.get(filters.landingSlug)?.name || filters.landingSlug}
               <button onClick={() => setFilters(p => ({ ...p, landingSlug: '', page: 1 }))} className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-red-500/10 hover:text-red-500">
                 <X className="h-3 w-3" />
               </button>
@@ -721,7 +727,7 @@ export default function OrdersPage() {
                     <p className="text-base font-semibold" style={{ color: 'var(--foreground)' }}>Chưa có đơn hàng nào</p>
                     <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>
                       {filters.landingSlug
-                        ? 'Không tìm thấy đơn hàng cho trang này'
+                        ? 'Không tìm thấy đơn hàng cho sản phẩm này'
                         : 'Đơn hàng sẽ hiển thị khi có khách đặt hàng từ LadiPage'}
                     </p>
                   </td>
@@ -750,7 +756,7 @@ export default function OrdersPage() {
                         {order.external_id}
                       </button>
                     </td>
-                    {/* Landing Page — minimal with filter icon on hover */}
+                    {/* Sản phẩm — minimal with filter icon on hover */}
                     <td className="px-4 py-3.5">
                       {order.landing_slug ? (
                         <button
@@ -980,7 +986,7 @@ export default function OrdersPage() {
               </div>
 
               {!editOrder && <div>
-                <label htmlFor="order-url-page" className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>URL Landing Page <span className="text-xs font-normal">(không bắt buộc)</span></label>
+                <label htmlFor="order-url-page" className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>URL Sản phẩm <span className="text-xs font-normal">(không bắt buộc)</span></label>
                 <input id="order-url-page" type="url" className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   placeholder="https://example.com/landing-page" value={formData.url_page} onChange={e => setFormData(p => ({ ...p, url_page: e.target.value }))} />
@@ -991,9 +997,9 @@ export default function OrdersPage() {
                 <>
                   <div className="border-t pt-5" style={{ borderColor: 'var(--border)' }}>
                     <p className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--muted-foreground)' }}>Sản phẩm</p>
-                    {/* Landing Page select */}
+                    {/* Sản phẩm select */}
                     <div>
-                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Landing Page <span className="text-red-500">*</span></label>
+                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Sản phẩm <span className="text-red-500">*</span></label>
                       <select
                         className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
                         style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
@@ -1001,7 +1007,7 @@ export default function OrdersPage() {
                         onChange={e => handleSelectLP(e.target.value ? Number(e.target.value) : null)}
                         disabled={formLoadingLP}
                       >
-                        <option value="">{formLoadingLP ? 'Đang tải...' : '— Chọn Landing Page —'}</option>
+                        <option value="">{formLoadingLP ? 'Đang tải...' : '— Chọn Sản phẩm —'}</option>
                         {formLandingPages.filter(lp => lp.product.variants.length > 0).map(lp => (
                           <option key={lp.id} value={lp.id}>
                             {lp.name} ({lp.product.name})

@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       { header: 'Địa chỉ giao hàng', key: 'deliveryAddr', width: 35 },
       { header: 'Trạng thái thanh toán', key: 'paymentStatus', width: 16 },
       { header: 'Ghi chú đơn hàng', key: 'comment', width: 35 },
-      { header: 'URL Landing Page', key: 'urlPage', width: 55 },
+      { header: 'URL sản phẩm', key: 'urlPage', width: 55 },
       { header: 'xmlId', key: 'xmlId', width: 35 },
     ];
 

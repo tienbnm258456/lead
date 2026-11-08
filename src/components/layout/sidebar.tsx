@@ -32,7 +32,7 @@ const navItems = [
     icon: ShoppingCart,
   },
   {
-    label: 'Landing Pages',
+    label: 'Sản phẩm',
     href: '/admin/landing-pages',
     icon: Globe,
   },

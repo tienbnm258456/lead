@@ -28,8 +28,8 @@ export function AccountFormDialog({ editing, canCreateManager, busy, form, setFo
   }, []);
   const close = () => { if (!busy) onClose(); };
   const roles = [
-    ...(canCreateManager ? [{ value: 'ADMIN2', title: 'Quản lý', description: 'Quản lý Landing Page, đơn hàng và người dùng trong nhóm.', icon: ShieldCheck }] : []),
-    { value: 'USER', title: 'Người dùng', description: 'Làm việc với Landing Page và đơn hàng trong nhóm.', icon: UserRound },
+    ...(canCreateManager ? [{ value: 'ADMIN2', title: 'Quản lý', description: 'Quản lý sản phẩm, đơn hàng và người dùng trong nhóm.', icon: ShieldCheck }] : []),
+    { value: 'USER', title: 'Người dùng', description: 'Làm việc với Sản phẩm và đơn hàng trong nhóm.', icon: UserRound },
   ];
   return <dialog ref={dialog} aria-labelledby="account-form-title" aria-describedby="account-form-description"
     className="fixed inset-0 m-auto max-h-[92dvh] w-[calc(100%_-_2rem)] max-w-3xl overflow-y-auto rounded-3xl border p-0 shadow-2xl backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm"

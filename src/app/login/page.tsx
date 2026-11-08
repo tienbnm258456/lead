@@ -145,7 +145,7 @@ const handleLogin = async (e: React.FormEvent) => {
                 Lead Admin Portal
               </h1>
               <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                Đăng nhập để quản lý dữ liệu Lead & Landing Page
+                Đăng nhập để quản lý dữ liệu Lead & Sản phẩm
               </p>
             </div>
 

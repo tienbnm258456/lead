@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (items[0]?.selectionError) {
       const page = await prisma.landingPage.findFirst({ where: { product: { slug: order.landing_slug || '' } },
         include: { product: { include: { variants: { where: { active: true } } } } } });
-      if (!page) return NextResponse.json({ error: 'Landing page không còn tồn tại' }, { status: 400 });
+      if (!page) return NextResponse.json({ error: 'Sản phẩm không còn tồn tại' }, { status: 400 });
       const body = items[0].rawPayload || {};
       try {
         const resolved = resolveLandingItems((page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
