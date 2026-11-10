@@ -20,7 +20,7 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   try {
-    const rows = await prisma.systemSetting.findMany();
+    const rows = await prisma.systemSetting.findMany({ where: { key: { in: Object.keys(DEFAULTS) } } });
     const settings: Record<string, string> = { ...DEFAULTS };
     for (const row of rows) {
       settings[row.key] = row.value;
@@ -100,7 +100,7 @@ export async function POST() {
   try {
     invalidateSettingsCache();
     // Force re-load
-    const rows = await prisma.systemSetting.findMany();
+    const rows = await prisma.systemSetting.findMany({ where: { key: { in: Object.keys(DEFAULTS) } } });
     const settings: Record<string, string> = { ...DEFAULTS };
     for (const row of rows) {
       settings[row.key] = row.value;

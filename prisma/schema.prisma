@@ -340,3 +340,13 @@ model RetailCrmEvent {
   @@index([external_id, received_at])
   @@map("retailcrm_events")
 }
+
+/// Danh mục kho UZ. Biến thể tham chiếu sản phẩm cha trong cùng bảng.
+model UzProduct {
+  sourceId     String  @id @map("source_id") @db.Uuid
+  originalName String? @map("original_name")
+  nameVi       String? @map("name_vi")
+  xmlId        String? @map("xml_id")
+
+  @@map("uz_products")
+}

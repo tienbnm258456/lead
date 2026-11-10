@@ -30,7 +30,7 @@ export async function getSettings(): Promise<Record<string, string>> {
   }
 
   try {
-    const rows = await prisma.systemSetting.findMany();
+    const rows = await prisma.systemSetting.findMany({ where: { key: { in: Object.keys(DEFAULTS) } } });
     cached = { ...DEFAULTS };
     for (const row of rows) {
       cached[row.key] = row.value;

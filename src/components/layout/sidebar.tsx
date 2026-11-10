@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   ShoppingCart,
+  Package,
   Globe,
   ChevronLeft,
   ChevronRight,
@@ -35,6 +36,11 @@ const navItems = [
     label: 'Sản phẩm',
     href: '/admin/landing-pages',
     icon: Globe,
+  },
+  {
+    label: 'Kho đối tác',
+    href: '/admin/uz-products',
+    icon: Package,
   },
   {
     label: 'Dung lượng',
@@ -108,7 +114,7 @@ export function Sidebar() {
             Menu
           </p>
         )}
-        {navItems.filter(item => item.href !== '/admin/storage' || userRole === 'ADMIN').map((item) => {
+        {navItems.filter(item => !['/admin/storage', '/admin/uz-products'].includes(item.href) || userRole === 'ADMIN').map((item) => {
           const isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(item.href));
           return (
             <Link

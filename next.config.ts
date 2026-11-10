@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  experimental: {
+    // Avoid stale HMR versions when reopening the local Turbopack cache.
+    turbopackFileSystemCacheForDev: false,
+  },
   // Enable server-side logging in production (next start / PM2)
   // Không có config này, console.log trong API routes sẽ bị suppress
   logging: {

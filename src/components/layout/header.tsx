@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 
 const breadcrumbMap: Record<string, string> = {
   admin: 'Trang chủ',
+  'uz-products': 'Kho đối tác',
   orders: 'Đơn hàng',
   'landing-pages': 'Sản phẩm',
   leads: 'Quản lý Lead',
