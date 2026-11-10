@@ -26,7 +26,11 @@ const rollback = new Error('rollback fixtures');
     let actor = member; let crmCalls = 0;
     const db = new Proxy(tx, { get(target, prop) { if (prop === '$transaction') return async operations => typeof operations === 'function' ? operations(db) : Promise.all(operations); return target[prop]; } });
     const denied = () => ({ error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) });
-    const mocks = { 'next/server': { NextResponse }, '@/lib/prisma': { prisma: db }, '@/lib/permissions': perms, '@/lib/ladipage-order': helpers, '@/lib/password': password,
+    const crmStatus = load('src/lib/crm-status-display.ts');
+    const orderFilters = load('src/lib/order-filters.ts', { './crm-status-display': crmStatus });
+    const orderAmounts = load('src/lib/order-amounts.ts', { './crm-status-display': crmStatus });
+    const orderXmlFilter = load('src/lib/order-xml-filter.ts', { './prisma': { prisma: db } });
+    const mocks = { '@/lib/order-filters': orderFilters, '@/lib/order-amounts': orderAmounts, '@/lib/order-xml-filter': orderXmlFilter, 'next/server': { NextResponse }, '@/lib/prisma': { prisma: db }, '@/lib/permissions': perms, '@/lib/ladipage-order': helpers, '@/lib/password': password,
       '@/lib/require-auth': { requireAuth: async () => ({ user: actor }), requireAdmin: async () => actor.role === 'ADMIN' ? { user: actor } : denied(), requireUserManager: async () => perms.canManageUsers(actor) ? { user: actor } : denied() },
       '@/lib/retailcrm': { createRetailCrmOrder: async () => { crmCalls++; return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 1 } }; } } };
     const orders = load('src/app/api/orders/route.ts', mocks); const pages = load('src/app/api/landing-pages/[id]/route.ts', mocks);
@@ -49,7 +53,7 @@ const rollback = new Error('rollback fixtures');
     await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()));
     const cells = workbook.worksheets.flatMap(sheet => sheet.getColumn(6).values).filter(value => typeof value === 'string');
     const urls = workbook.worksheets.flatMap(sheet => sheet.getColumn(17).values);
-    assert.ok(urls.includes('URL Landing Page'));
+    assert.ok(urls.includes('URL sản phẩm'));
     const xmlIds = workbook.worksheets.flatMap(sheet => sheet.getColumn(18).values);
     assert.ok(xmlIds.includes('xmlId'));
     assert.ok(xmlIds.includes('3B5ggmZQg35w2QgJWnoZ21'));
@@ -121,6 +125,20 @@ const rollback = new Error('rollback fixtures');
     assert.equal((await accounts.PATCH(request({ id: manager.id, active: true }))).status, 200);
     assert.equal((await (await accounts.GET()).json()).groups.find(group => group.id === groupA.id).assignable, true);
     console.log('PASS: group isolation, transfer, locked-manager assignment blocked, members preserved/movable, unlock restores assignments');
+    actor = manager;
+    const createdMemberId = (await tx.adminUser.findUnique({ where: { username: tag + 'newuser' } })).id;
+    assert.equal((await accounts.DELETE(request({ id: createdMemberId, permanent: true }))).status, 403);
+    assert.ok(await tx.adminUser.findUnique({ where: { id: createdMemberId } }));
+    actor = root;
+    assert.equal((await accounts.DELETE(request({ id: root.id, permanent: true }))).status, 403);
+    assert.equal((await accounts.DELETE(request({ id: manager.id, permanent: true }))).status, 200);
+    assert.equal(await tx.adminUser.findUnique({ where: { id: manager.id } }), null);
+    assert.ok(await tx.accessGroup.findUnique({ where: { id: groupA.id } }));
+    assert.equal((await tx.adminUser.findUnique({ where: { id: createdMemberId } })).group_id, groupA.id);
+    assert.equal((await tx.order.findUnique({ where: { id: created.id } })).group_id, groupA.id);
+    assert.equal((await accounts.DELETE(request({ id: createdMemberId, permanent: true }))).status, 200);
+    assert.equal(await tx.adminUser.findUnique({ where: { id: createdMemberId } }), null);
+    console.log('PASS: permanent account deletion is restricted to total admins and preserves related data');
     throw rollback;
   }, { timeout: 30000 }); } catch (err) { if (err !== rollback) throw err; }
 })().catch(err => { console.error(err); process.exitCode = 1; }).finally(() => prisma.$disconnect());

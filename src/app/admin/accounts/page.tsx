@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountFormDialog } from '@/components/account-form-dialog';
-import { AlertCircle, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, LockKeyhole, Mail, Pencil, Plus, RefreshCw, Search, ShieldCheck, SlidersHorizontal, UserRound, Users, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, LockKeyhole, Mail, Pencil, Plus, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, UserRound, Users, X } from 'lucide-react';
 interface Account { id: number; username: string; name: string; email: string | null; role: string; group_id: number | null; active: boolean }
 interface Group { id: number; name: string; display_name: string; assignable: boolean }
 const labels: Record<string, string> = { ADMIN: 'Quản trị viên', ADMIN2: 'Quản lý', USER: 'Người dùng' };
@@ -51,11 +51,13 @@ export default function AccountsPage() {
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Lỗi kết nối'); }
     finally { setBusy(false); }
   };
-  const remove = async (user: Account) => {
-    if (!confirm('Khóa tài khoản ' + user.username + '? Lịch sử dữ liệu được giữ nguyên.')) return;
+  const remove = async (user: Account, permanent = false) => {
+    const action = permanent ? 'Xóa vĩnh viễn' : 'Khóa';
+    const consequence = permanent ? 'Thao tác này không thể hoàn tác. Nhóm, thành viên và dữ liệu nghiệp vụ được giữ lại.' : 'Lịch sử dữ liệu được giữ nguyên.';
+    if (!confirm(action + ' tài khoản @' + user.username + '? ' + consequence)) return;
     setRemovingId(user.id);
     try {
-      const response = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: user.id }) });
+      const response = await fetch('/api/admin/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: user.id, permanent }) });
       const body = await response.json(); if (!response.ok) throw new Error(body.error); toast.success(body.message); await load();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Lỗi kết nối'); }
     finally { setRemovingId(null); }
@@ -132,7 +134,16 @@ export default function AccountsPage() {
               <td className="px-5 py-4"><span className={'inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ' + style.badge}><Icon className="h-3.5 w-3.5" />{labels[user.role] || user.role}</span></td>
               <td className="px-5 py-4"><span className="inline-flex items-center gap-2 text-xs" style={{ color: 'var(--muted-foreground)' }}><Users className="h-3.5 w-3.5 shrink-0 opacity-60" />{user.role === 'ADMIN' ? 'Toàn hệ thống' : group?.display_name || 'Chưa gán nhóm'}</span></td>
               <td className="px-5 py-4"><span className={'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold ' + (user.active ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-500/10 text-slate-500 dark:text-slate-400')}><span className={'h-1.5 w-1.5 rounded-full ' + (user.active ? 'bg-emerald-500' : 'bg-slate-400')} />{user.active ? 'Hoạt động' : 'Đã khóa'}</span></td>
-              <td className="px-5 py-4"><div className="flex justify-end gap-1">{editable ? <><button type="button" title="Sửa tài khoản" aria-label={'Sửa tài khoản ' + user.username} onClick={() => edit(user)} disabled={removingId !== null} className="flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-indigo-500/10 hover:text-indigo-500 disabled:opacity-40"><Pencil className="h-3.5 w-3.5" /></button><button type="button" title={user.active ? 'Khóa tài khoản' : 'Tài khoản đã khóa'} aria-label={'Khóa tài khoản ' + user.username} onClick={() => remove(user)} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-25" disabled={!user.active || removingId !== null}>{removingId === user.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}</button></> : <span title="Tài khoản được bảo vệ" className="flex h-8 w-8 items-center justify-center" style={{ color: 'var(--muted-foreground)' }}><ShieldCheck className="h-4 w-4 opacity-40" /></span>}</div></td>
+              <td className="px-5 py-4"><div className="flex justify-end gap-1">{editable ? <><button type="button" title="Sửa tài khoản" aria-label={'Sửa tài khoản ' + user.username} onClick={() => edit(user)} disabled={removingId !== null} className="flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-indigo-500/10 hover:text-indigo-500 disabled:opacity-40"><Pencil className="h-3.5 w-3.5" /></button><button type="button" title={user.active ? 'Khóa tài khoản' : 'Tài khoản đã khóa'} aria-label={'Khóa tài khoản ' + user.username} onClick={() => remove(user)} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-25" disabled={!user.active || removingId !== null}>{removingId === user.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}</button>
+                {totalAdmin && <button
+                  type="button"
+                  title="Xóa vĩnh viễn tài khoản"
+                  aria-label={'Xóa vĩnh viễn tài khoản ' + user.username}
+                  onClick={() => remove(user, true)}
+                  disabled={removingId !== null}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-500/10 disabled:opacity-25"
+                ><Trash2 className="h-3.5 w-3.5" /></button>}
+              </> : <span title="Tài khoản được bảo vệ" className="flex h-8 w-8 items-center justify-center" style={{ color: 'var(--muted-foreground)' }}><ShieldCheck className="h-4 w-4 opacity-40" /></span>}</div></td>
             </tr>;
           })}
         </tbody>

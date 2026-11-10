@@ -67,9 +67,19 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await requireUserManager(); if (auth.error) return auth.error;
   try {
-    const { id } = await request.json();
+    const { id, permanent } = await request.json();
+    if (permanent === true && !isTotalAdmin(auth.user)) {
+      return NextResponse.json({ error: 'Chỉ Admin tổng được xóa vĩnh viễn tài khoản' }, { status: 403 });
+    }
     const target = await prisma.adminUser.findUnique({ where: { id: Number(id) } });
-    if (!target || !canManageAccount(auth.user, target)) return NextResponse.json({ error: 'Không có quyền xóa tài khoản này' }, { status: 403 });
+    if (!target || !canManageAccount(auth.user, target)) return NextResponse.json({ error: 'Không có quyền quản lý tài khoản này' }, { status: 403 });
+    if (permanent === true) {
+      const result = await prisma.adminUser.deleteMany({
+        where: { id: target.id, role: { in: ['ADMIN2', 'USER'] } },
+      });
+      if (!result.count) return NextResponse.json({ error: 'Tài khoản đã thay đổi. Hãy tải lại danh sách.' }, { status: 409 });
+      return NextResponse.json({ success: true, message: 'Đã xóa vĩnh viễn tài khoản' });
+    }
     await prisma.adminUser.updateMany({ where: { id: target.id, role: isTotalAdmin(auth.user) ? { not: 'ADMIN' } : 'USER', ...(!isTotalAdmin(auth.user) ? dataScope(auth.user) : {}) }, data: { active: false, session_version: { increment: 1 } } });
     return NextResponse.json({ success: true, message: 'Đã khóa tài khoản, giữ nguyên lịch sử dữ liệu' });
   } catch { return NextResponse.json({ error: 'Không xử lý được tài khoản' }, { status: 400 }); }
