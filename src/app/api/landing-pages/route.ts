@@ -110,15 +110,8 @@ export async function POST(request: NextRequest) {
     if (!tones.length && !isLandingXmlId(body.xml_id)) {
       throw new SelectionError('Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng.');
     }
-    if (Array.isArray(body.variants)) {
-      const invalidPromotion = body.variants.findIndex((v: Record<string, unknown> | null) =>
-        !v || typeof v.promotion !== 'string' || !v.promotion.trim() || v.promotion.trim().length > 100);
-      if (invalidPromotion >= 0) return NextResponse.json({
-        error: 'Gói ' + (invalidPromotion + 1) + ': Thông tin khuyến mại là bắt buộc, tối đa 100 ký tự. Nhập mã đã thống nhất với đối tác, ví dụ 1+1 hoặc 2+2, để ghép vào XML ID gửi CRM.',
-      }, { status: 400 });
-    }
     if (body.variants !== undefined && (!Array.isArray(body.variants) || body.variants.length === 0 || body.variants.some((v: Record<string, unknown>) =>
-      typeof v.label !== 'string' || !v.label.trim() ||
+      !v || typeof v.label !== 'string' || !v.label.trim() ||
       typeof v.price !== 'number' || !Number.isFinite(v.price) || v.price < 0 ||
       (v.delivery_fee !== undefined && (typeof v.delivery_fee !== 'number' || !Number.isFinite(v.delivery_fee) || v.delivery_fee < 0)) ||
       (v.promotion != null && (typeof v.promotion !== 'string' || v.promotion.trim().length > 100)) || (v.xml_id != null && typeof v.xml_id !== 'string') || (v.size != null && typeof v.size !== 'string')
