@@ -50,8 +50,8 @@ export async function readLandingBody(request: Request): Promise<Record<string, 
 }
 const normalize = (value: string) => value.toLowerCase().normalize('NFKC')
   .replace(/[‘’ʻʼ՚ʻʼ']/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
-export type LandingTone = { label: string; xmlId: string };
-type LandingProduct = { name: string; xml_id: string | null; tone_xml_ids?: unknown };
+export type LandingTone = { label: string; xmlId: string; name_xml_id?: string | null };
+type LandingProduct = { name: string; xml_id: string | null; name_xml_id?: string | null; tone_xml_ids?: unknown };
 
 export function landingTones(value: unknown): LandingTone[] {
   return Array.isArray(value) ? value.filter((tone): tone is LandingTone =>
@@ -62,9 +62,15 @@ export function isLandingXmlId(value: unknown): value is string {
   return typeof value === 'string' && Boolean(value.trim()) && value.trim().length <= 255 && !/[,\r\n]/.test(value);
 }
 
+export function parseOfferName(value: unknown): string | null {
+  const name = scalar(value);
+  if (name.length > 255) throw new SelectionError('Tên XML ID tối đa 255 ký tự.');
+  return name || null;
+}
+
 export function parseLandingTones(value: unknown): LandingTone[] {
   if (value === undefined || (Array.isArray(value) && !value.length)) return [];
-  const tones = landingTones(value).map(tone => ({ label: tone.label.trim(), xmlId: tone.xmlId.trim() }));
+  const tones = landingTones(value).map(tone => ({ label: tone.label.trim(), xmlId: tone.xmlId.trim(), name_xml_id: parseOfferName(tone.name_xml_id) }));
   if (tones.length < 2 || !Array.isArray(value) || value.length !== tones.length ||
     tones.some(tone => !normalize(tone.label) || tone.label.length > 100 || !isLandingXmlId(tone.xmlId)) ||
     new Set(tones.map(tone => normalize(tone.label))).size !== tones.length ||
@@ -127,6 +133,7 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
   const deliveryFee = Math.max(0, ...matches.map(m => m.variant.delivery_fee));
   const items = matches.map(({ variant, xmlId }, index) => ({
     xmlId, quantity: 1, initialPrice: variant.price, productName: product.name,
+    name_xml_id: (tone ? tone.name_xml_id : product.name_xml_id) || product.name,
     variantLabel: variant.label, promotion: variant.promotion || undefined,
     size: sizes.join(' + ') || undefined,
     ...(tone && { tone: tone.label }),

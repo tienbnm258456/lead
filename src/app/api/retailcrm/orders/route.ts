@@ -92,8 +92,11 @@ export async function POST(request: NextRequest) {
           text: body.delivery.address.text,
         },
       },
+      packageName: typeof body.customFields?.blok_doprodazh === 'string' ? body.customFields.blok_doprodazh : undefined,
       items: body.items.map((item: Record<string, unknown>) => ({
         xmlId: item.xmlId as string,
+        name_xml_id: typeof item.name_xml_id === 'string' ? item.name_xml_id : undefined,
+        variantLabel: typeof item.variantLabel === 'string' ? item.variantLabel : undefined,
         quantity: item.quantity as number,
         initialPrice: item.initialPrice as number,
       })),

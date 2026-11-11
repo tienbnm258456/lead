@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { isLandingXmlId, parseLandingTones, parseLandingUrl, scalar, SelectionError } from '@/lib/ladipage-order';
+import { isLandingXmlId, parseLandingTones, parseLandingUrl, parseOfferName, scalar, SelectionError } from '@/lib/ladipage-order';
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const tones = parseLandingTones(body.tone_xml_ids);
+    const offerName = body.name_xml_id === undefined ? undefined : parseOfferName(body.name_xml_id);
     const optionLabel = scalar(body.option_label);
     if (tones.length && body.has_sizes !== undefined && (!body.has_sizes || !optionLabel)) {
       throw new SelectionError('Bật tùy chọn và nhập tên tùy chọn khi cấu hình XML ID riêng.');
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
           name: pageName,
           xml_id: tones.length ? null : body.xml_id.trim(),
           tone_xml_ids: tones.length ? tones : Prisma.DbNull,
+          name_xml_id: offerName,
           group_id: groupId,
           slug,
           has_sizes: Boolean(tones.length || body.has_sizes),

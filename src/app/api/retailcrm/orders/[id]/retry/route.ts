@@ -93,6 +93,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       },
       items,
+      packageName: order.selected_package,
     };
 
     // ── Call RetailCRM ────────────────────────────────────────────────

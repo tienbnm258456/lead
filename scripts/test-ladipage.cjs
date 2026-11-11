@@ -27,7 +27,7 @@ test('multiple packages use every item and charge max shipping once; CRM divides
   assert.equal(resolved.totalPrice, 878000);
   const input = { externalId: 'GF-10001', firstName: 'Ali', phone: '123', delivery: { cost: resolved.deliveryFee, address: { text: 'Bukhara' } }, items: resolved.items };
   const output = crm.buildOrderPayload(input);
-  assert.deepEqual(output.items.map(i => [i.offer.xmlId, i.quantity, i.initialPrice]), [['OFFER_A_S, S', 1, 299], ['OFFER_B_S, S', 1, 529]]);
+  assert.deepEqual(output.items.map(i => [i.offer.xmlId, i.quantity, i.initialPrice]), [['OFFER_A_S', 1, 299], ['OFFER_B_S', 1, 529]]);
   assert.equal(output.delivery.cost, 50);
   assert.equal(input.items[0].initialPrice, 299000);
   assert.deepEqual(crm.buildOrderPayload(input), output);
@@ -72,7 +72,7 @@ test('webhook sends multiple sizes and holds only an unknown package', async () 
     assert.equal(saved.url_page, "https://example.test/vc-cream.store");
     assert.deepEqual(JSON.parse(saved.items_json)[0].rawPayload, { ...body, url_page: "https://example.test/vc-cream.store" });
     if (ambiguous) { assert.equal(sent, undefined); assert.equal(saved.sync_status, 'FAILED'); assert.equal(response.body.requiresReview, true); }
-    else { assert.deepEqual(sent.items.map(i => i.offer.xmlId), ['3B5ggmZQg35w2QgJWnoZ21, 1+1, S + L', '3B5ggmZQg35w2QgJWnoZ21, 2+2, S + L']); assert.equal(JSON.parse(saved.items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21'); assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
+    else { assert.deepEqual(sent.items.map(i => i.offer.xmlId), ['3B5ggmZQg35w2QgJWnoZ21', '3B5ggmZQg35w2QgJWnoZ21']); assert.equal(JSON.parse(saved.items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21'); assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
   }
 });
 
@@ -128,19 +128,23 @@ test('all 1/2/3 selected sizes apply to every package without changing quantity 
     assert.deepEqual(result.items.map(item => item.size), [sizes.join(' + '), sizes.join(' + ')]);
     assert.deepEqual(result.items.map(item => item.quantity), [1, 1]);
     const sent = crm.buildOrderPayload({ externalId: 'TEST', firstName: 'A', phone: '1', delivery: { cost: result.deliveryFee, address: { text: 'x' } }, items: result.items });
-    assert.equal(sent.items[0].offer.xmlId, 'OFFER_A_S, 1+1, ' + sizes.join(' + '));
-    assert.equal(sent.items[1].offer.xmlId, 'OFFER_B_S, 2+2, ' + sizes.join(' + '));
+    assert.equal(sent.items[0].offer.xmlId, 'OFFER_A_S');
+    assert.equal(sent.items[1].offer.xmlId, 'OFFER_B_S');
     assert.equal('customerComment' in sent, false);
   }
 });
 
-test('requested XML format strips auto suffix, abbreviates descriptive sizes and is repeatable', () => {
+test('CRM sends raw XML IDs, offer names and distinct package labels', () => {
   const input = { externalId: 'ORDT-8', firstName: 'Test', phone: '1', delivery: { cost: 65000, address: { text: 'x' } }, items: [
-    { xmlId: 'XML0001_OFFER', promotion: '1+1', size: 'S o‘lcham: 55 kg dan kam + L o‘lcham: 65–75 kg', quantity: 1, initialPrice: 390000 },
-    { xmlId: 'XML0002_OFFER', promotion: '2+2', size: 'S', quantity: 1, initialPrice: 610000 },
+    { xmlId: 'XML0001_OFFER', name_xml_id: 'Offer S', variantLabel: 'Gói 1+1', promotion: '1+1', size: 'S o‘lcham: 55 kg dan kam + L o‘lcham: 65–75 kg', quantity: 1, initialPrice: 390000 },
+    { xmlId: 'XML0002_OFFER', name_xml_id: 'Offer L', variantLabel: 'Gói 2+2', promotion: '2+2', size: 'S', quantity: 1, initialPrice: 610000 },
   ] };
   const output = crm.buildOrderPayload(input);
-  assert.deepEqual(output.items.map(i => i.offer.xmlId), ['XML0001, 1+1, S + L', 'XML0002, 2+2, S']);
+  assert.deepEqual(output.items.map(i => i.offer), [
+    { xmlId: 'XML0001_OFFER', name: 'Offer S' },
+    { xmlId: 'XML0002_OFFER', name: 'Offer L' },
+  ]);
+  assert.deepEqual(output.customFields, { blok_doprodazh: 'Gói 1+1 | Gói 2+2' });
   assert.equal('customerComment' in output, false);
   assert.deepEqual(crm.buildOrderPayload(input), output);
   assert.equal(input.items[0].xmlId, 'XML0001_OFFER');
@@ -166,12 +170,17 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
     '@/lib/retailcrm': { createRetailCrmOrder: async payload => { sent = crm.buildOrderPayload(payload); return { status: 'SUCCESS', sentAt: new Date(), completedAt: new Date(), response: { id: 99 } }; } },
     '@prisma/client': {}, '@/lib/require-auth': { requireAuth: async () => ({ user: { id: 1, role: 'ADMIN' } }), requireAdmin: async () => ({ user: { id: 1, role: 'ADMIN' } }) },
   });
-  const body = { customer_name: 'Test User', customer_phone: '0987654573', delivery_address: 'Test', landing_page_id: 7, variant_id: 2,
+  const body = { customer_name: 'Test User', customer_phone: '0987654573', delivery_address: 'Test', url_page: 'https://example.test/manual', landing_page_id: 7, variant_id: 2,
     selected_size: 'S o‘lcham: 55 kg dan kam', total_price: 1, selected_package: 'wrong', landing_slug: 'wrong' };
+  const missingUrl = await route.POST({ json: async () => ({ ...body, url_page: '' }) });
+  assert.equal(missingUrl.status, 400);
+  const invalidUrl = await route.POST({ json: async () => ({ ...body, url_page: 'javascript:alert(1)' }) });
+  assert.equal(invalidUrl.status, 400);
+  assert.equal(saved, undefined);
   const result = await route.POST({ json: async () => body });
   assert.equal(result.status, 201);
   assert.equal(result.body.data.external_id, 'MAN-00011');
-  assert.equal(sent.items[0].offer.xmlId, '3B5ggmZQg35w2QgJWnoZ21, 2+2, S');
+  assert.equal(sent.items[0].offer.xmlId, '3B5ggmZQg35w2QgJWnoZ21');
   assert.equal(sent.items[0].initialPrice, 610);
   assert.equal(sent.items[0].quantity, 1);
   assert.equal(sent.delivery.cost, 65);
@@ -183,24 +192,25 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   assert.equal(invalid.status, 400); assert.equal(sent, undefined);
   toneConfig = [
     { label: 'Ivory White', xmlId: 'IVORY_ID' },
-    { label: 'Natural White', xmlId: 'NATURAL_ID' },
+    { label: 'Natural White', xmlId: 'NATURAL_ID', name_xml_id: 'Kakashow Natural White' },
   ];
   const noTone = await route.POST({ json: async () => body });
   assert.equal(noTone.status, 400);
   assert.equal(sent, undefined);
   const toneOrder = await route.POST({ json: async () => ({ ...body, selected_option: 'Natural White', url_page: 'https://example.test/client-override' }) });
   assert.equal(toneOrder.status, 201);
-  assert.equal(sent.items[0].offer.xmlId, 'NATURAL_ID, 2+2, Natural White');
+  assert.deepEqual(sent.items[0].offer, { xmlId: 'NATURAL_ID', name: 'Kakashow Natural White' });
+  assert.deepEqual(sent.customFields, { blok_doprodazh: variant.label });
   assert.match(saved.selected_size, /^Natural White/);
-  assert.equal(saved.url_page, 'https://example.test/tone');
+  assert.equal(saved.url_page, 'https://example.test/client-override');
 });
 
-test('tone orders append the promotion and configured name to the selected XML ID', () => {
+test('tone orders store the raw XML ID and configured offer name', () => {
   const toneProduct = {
     ...product,
     tone_xml_ids: helpers.parseLandingTones([
       { label: 'Ivory White', xmlId: 'IVORY_ID' },
-      { label: 'Natural White', xmlId: 'NATURAL_ID' },
+      { label: 'Natural White', xmlId: 'NATURAL_ID', name_xml_id: 'Kakashow Natural White' },
     ]),
   };
   for (const [tone, xmlId] of [['Ivory White', 'IVORY_ID'], [' natural white ', 'NATURAL_ID']]) {
@@ -211,7 +221,7 @@ test('tone orders append the promotion and configured name to the selected XML I
     assert.equal(order.items[0].xmlId, xmlId);
     assert.equal(order.items[0].initialPrice, variants[0].price);
     assert.equal(order.items[0].quantity, 1);
-    assert.equal(crm.formatOfferXmlId(order.items[0]), [xmlId, '1+1', tone.trim() === 'Ivory White' ? 'Ivory White' : 'Natural White'].join(', '));
+    assert.equal(order.items[0].name_xml_id, xmlId === 'NATURAL_ID' ? 'Kakashow Natural White' : product.name);
   }
   assert.deepEqual(helpers.readLandingSelections({ products: variants[0].label, option: '500g' }, product).sizes, ['500g']);
   assert.equal(helpers.readLandingSelections({ products: variants[0].label, size: 'Ivory White' }, toneProduct).tone, 'Ivory White');

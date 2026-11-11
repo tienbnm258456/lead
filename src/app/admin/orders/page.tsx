@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Filter, X, ChevronLeft, ChevronRight,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw,
-  ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye,
+  ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CrmStatusBadge } from '@/components/crm-status-badge';
@@ -16,7 +16,7 @@ import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-det
 import { OrderAmountCards } from '@/components/order-amount-cards';
 import { ViewportTableScroll } from '@/components/viewport-table-scroll';
 import type { OrderAmounts } from '@/lib/order-amounts';
-import { landingTones } from '@/lib/ladipage-order';
+import { landingTones, parseLandingUrl } from '@/lib/ladipage-order';
 
 interface Order extends OrderDetailData {
   id: number;
@@ -132,6 +132,22 @@ async function fetchOrders(filters: OrderFilters): Promise<OrdersResponse> {
   return res.json();
 }
 
+function OrderLandingLink({ value }: { value: string | null }) {
+  let href: string | null = null;
+  try {
+    href = parseLandingUrl(value);
+  } catch {
+    // Legacy orders may contain a non-HTTP URL.
+  }
+  return href ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" title={value || undefined}
+      className="inline-flex max-w-64 items-center gap-1.5 rounded-md px-2 py-1 font-medium text-indigo-600 underline decoration-indigo-400/60 underline-offset-2 hover:bg-indigo-500/10 dark:text-indigo-300">
+      <span className="truncate">{value}</span>
+      <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+    </a>
+  ) : <span className="block max-w-64 truncate" title={value || undefined}>{value || '—'}</span>;
+}
+
 export default function OrdersPage() {
   const queryClient = useQueryClient();
   const [currentRole, setCurrentRole] = useState('');
@@ -161,6 +177,7 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [manualUrl, setManualUrl] = useState('');
   const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -263,6 +280,7 @@ export default function OrdersPage() {
   const closeForm = () => {
     setShowForm(false);
     setEditOrder(null);
+    setManualUrl('');
     setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
     setSelectedLPId(null);
     setSelectedVariantId(null);
@@ -270,6 +288,7 @@ export default function OrdersPage() {
 
   const openCreateForm = async () => {
     setEditOrder(null);
+    setManualUrl('');
     setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
     setSelectedLPId(null);
     setSelectedVariantId(null);
@@ -330,7 +349,7 @@ export default function OrdersPage() {
     if (editOrder) {
       updateMutation.mutate({ id: editOrder.id, payload: formData });
     } else {
-      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId, selected_option: formData.selected_size });
+      createMutation.mutate({ ...formData, url_page: manualUrl.trim(), landing_page_id: selectedLPId, variant_id: selectedVariantId, selected_option: formData.selected_size });
     }
   };
 
@@ -377,7 +396,7 @@ export default function OrdersPage() {
     bulkDeleteMutation.mutate(Array.from(selectedIds));
   };
 
-  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!optionValues.length || formData.selected_size)));
+  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (manualUrl.trim() && selectedLPId && selectedVariantId && (!optionValues.length || formData.selected_size)));
 
   const handleSort = useCallback((col: string) => {
     setFilters(p => ({
@@ -828,7 +847,7 @@ export default function OrdersPage() {
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-sm">
-                      <span className="block max-w-64 truncate select-text" title={order.url_page || undefined}>{order.url_page || '—'}</span>
+                      <OrderLandingLink value={order.url_page} />
                     </td>
                     {/* Status — soft bordered badge */}
                     <td className="px-4 py-3.5">
@@ -993,6 +1012,15 @@ export default function OrdersPage() {
                   style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
                   placeholder="Địa chỉ giao hàng" value={formData.delivery_address} onChange={e => setFormData(p => ({ ...p, delivery_address: e.target.value }))} />
               </div>
+
+              {!editOrder && (
+                <label className="grid gap-1.5 text-sm font-semibold">
+                  <span>URL landing page <span className="text-red-500">*</span></span>
+                  <input type="url" required maxLength={2048} value={manualUrl} onChange={e => setManualUrl(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3"
+                    placeholder="https://example.com/landing-page" />
+                </label>
+              )}
 
               {/* ── Product Cascade (only for new orders) ── */}
               {!editOrder && (

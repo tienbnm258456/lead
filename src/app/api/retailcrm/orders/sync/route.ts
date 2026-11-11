@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
       Number(body.delivery.cost) || 0,
     );
 
+    const packageName = typeof body.customFields?.blok_doprodazh === 'string' ? body.customFields.blok_doprodazh : undefined;
+
     // ── Step 1: Create order in DB with PENDING status + temp externalId
     const order = await prisma.order.create({
       data: {
@@ -70,6 +72,7 @@ export async function POST(request: NextRequest) {
         delivery_address: body.delivery.address.text,
         items_json: JSON.stringify(body.items.map((item: Record<string, unknown>, index: number) => ({ ...item, deliveryFee: index === 0 ? Number(body.delivery.cost) || 0 : 0 }))),
         total_price: totalPrice,
+        selected_package: packageName,
         sync_status: 'PENDING',
       },
     });
@@ -97,8 +100,11 @@ export async function POST(request: NextRequest) {
           text: body.delivery.address.text,
         },
       },
-      items: body.items.map((item: { xmlId: string; quantity: number; initialPrice: number }) => ({
+      packageName,
+      items: body.items.map((item: { xmlId: string; quantity: number; initialPrice: number; name_xml_id?: unknown; variantLabel?: unknown }) => ({
         xmlId: item.xmlId,
+        name_xml_id: typeof item.name_xml_id === 'string' ? item.name_xml_id : undefined,
+        variantLabel: typeof item.variantLabel === 'string' ? item.variantLabel : undefined,
         quantity: item.quantity,
         initialPrice: item.initialPrice,
       })),

@@ -1,5 +1,5 @@
 import { dataScope, landingScope } from '@/lib/permissions';
-import { ensureOfferXmlIds, landingTones, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
+import { ensureOfferXmlIds, landingTones, parseLandingUrl, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
@@ -163,6 +163,8 @@ export async function POST(request: Request) {
     const customer_name = scalar(body.customer_name);
     const customer_phone = scalar(body.customer_phone);
     const delivery_address = scalar(body.delivery_address);
+    const urlPage = parseLandingUrl(body.url_page);
+    if (!urlPage) return NextResponse.json({ error: 'Vui lòng nhập URL landing page' }, { status: 400 });
     if (!customer_name || !customer_phone || !delivery_address) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
@@ -199,7 +201,7 @@ export async function POST(request: Request) {
         customer_name,
         customer_phone,
         delivery_address,
-        url_page: page.landing_url || null,
+        url_page: urlPage,
         items_json: JSON.stringify(resolved.items),
         total_price: resolved.totalPrice,
         source: 'admin',

@@ -205,7 +205,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       selectedOption = sizeOption || matchedVariant.size || null;
       items = [{
         xmlId, quantity: matchedVariant.quantity, initialPrice: matchedVariant.price,
-        productName: product.name, variantLabel: matchedVariant.label,
+        productName: product.name, name_xml_id: product.name_xml_id || product.name, variantLabel: matchedVariant.label,
         size: matchedVariant.size || undefined, promotion: undefined, deliveryFee,
       }];
     }
@@ -249,7 +249,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           text: address,
         },
       },
-      items: usesTones ? items : items.map(({ xmlId, quantity, initialPrice }) => ({ xmlId, quantity, initialPrice })),
+      items,
     };
 
     const syncResult = await createRetailCrmOrder(payload);

@@ -46,6 +46,7 @@ model Product {
   name   String @db.VarChar(255) /// Tên sản phẩm hiển thị (VD: "Đai lưng", "Kem tẩy lông")
   slug   String @unique @db.VarChar(100) /// Định danh URL-safe, tự tạo từ tên (VD: "dai-lung-abc123")
   xml_id String? @db.VarChar(255) /// Mã sản phẩm trên RetailCRM (do đối tác cung cấp, điền sau)
+  name_xml_id String? @db.VarChar(255)
   tone_xml_ids Json?
 
   /// Tùy chọn phụ (ngoài gói sản phẩm): size, trọng lượng, màu sắc...

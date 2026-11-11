@@ -23,6 +23,8 @@ export type RetailCrmSyncStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT';
 
 export interface RetailCrmOrderItem {
   xmlId: string;
+  name_xml_id?: string | null;
+  productName?: string;
   tone?: string;
   promotion?: string;
   size?: string;
@@ -48,6 +50,7 @@ export interface RetailCrmOrderPayload {
     cost?: number; /// Phí vận chuyển (tách riêng, không cộng vào initialPrice)
   };
   items: RetailCrmOrderItem[];
+  packageName?: string | null;
 }
 
 export interface RetailCrmResponse {
@@ -75,18 +78,9 @@ export interface RetailCrmSyncResult {
 /**
  * Build the order JSON payload matching RetailCRM v5 format
  */
-export function formatOfferXmlId(item: RetailCrmOrderItem): string {
-  const tone = item.tone?.trim();
-  if (tone) return [item.xmlId, item.promotion?.trim(), tone].filter(Boolean).join(', ');
-  const base = item.xmlId.replace(/^(XML\d+)_OFFER$/, '$1');
-  const size = item.size?.split(/\s+\+\s+/).map(value => {
-    const label = value.trim();
-    return label.match(/^(XXXS|XXS|XS|XXXL|XXL|XL|S|M|L|[2-6]XL)(?=\s|$|[:–-])/i)?.[0].toUpperCase() || label;
-  }).filter(Boolean).join(' + ');
-  return [base, item.promotion?.trim(), size].filter(Boolean).join(', ');
-}
-
 export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, unknown> {
+  const packages = [...new Set(data.items.flatMap(item => typeof item.variantLabel === 'string' && item.variantLabel.trim() ? [item.variantLabel.trim()] : []))];
+  const packageName = packages.join(' | ') || data.packageName?.trim();
   return {
     externalId: data.externalId,
     firstName: data.firstName,
@@ -101,8 +95,13 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
         text: data.delivery.address.text,
       },
     },
+    ...(packageName && { customFields: { blok_doprodazh: packageName } }),
     items: data.items.map((item) => ({
-      offer: { xmlId: formatOfferXmlId(item) },
+      offer: {
+        xmlId: item.xmlId,
+        name: (typeof item.name_xml_id === 'string' && item.name_xml_id.trim()) ||
+          (typeof item.productName === 'string' && item.productName.trim()) || item.xmlId,
+      },
       quantity: item.quantity,
       initialPrice: item.initialPrice / 1000, // Chỉ giá sản phẩm, KHÔNG có phí ship
     })),
