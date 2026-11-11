@@ -24,7 +24,7 @@ export function ViewportTableScroll({ children }: { children: ReactNode }) {
       const left = Math.max(0, rect.left);
       const width = Math.min(document.documentElement.clientWidth, rect.right) - left;
       const visible = target.scrollWidth > target.clientWidth + 1 &&
-        rect.top < bottom - 20 && rect.bottom > bottom && width > 0;
+        rect.top < bottom - 36 && rect.bottom > bottom && width > 0;
       const next = visible ? { left, width, contentWidth: target.scrollWidth } : null;
       setBounds(previous => previous?.left === next?.left && previous?.width === next?.width &&
         previous?.contentWidth === next?.contentWidth ? previous : next);
@@ -58,7 +58,7 @@ export function ViewportTableScroll({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div ref={viewport} className="overflow-x-auto">
+      <div ref={viewport} className="orders-horizontal-scroll overflow-x-auto">
         {children}
       </div>
       {bounds && createPortal(
@@ -70,8 +70,8 @@ export function ViewportTableScroll({ children }: { children: ReactNode }) {
           role="region"
           aria-label="Cuộn ngang bảng đơn hàng"
           tabIndex={0}
-          className="fixed bottom-0 z-30 overflow-x-scroll overflow-y-hidden border-t border-[var(--border)] bg-[var(--card)]"
-          style={{ left: bounds.left, width: bounds.width, height: 20 }}
+          className="orders-horizontal-scroll fixed bottom-2 z-30 overflow-x-scroll overflow-y-hidden rounded-lg border border-indigo-400/50 bg-[var(--card)] shadow-[0_-4px_20px_rgba(0,0,0,0.25)] focus-visible:outline-2 focus-visible:outline-indigo-400"
+          style={{ left: bounds.left, width: bounds.width, height: 28 }}
           onScroll={event => {
             if (viewport.current) viewport.current.scrollLeft = event.currentTarget.scrollLeft;
           }}

@@ -254,6 +254,34 @@ body {
   opacity: 0.7;
 }
 
+.orders-horizontal-scroll::-webkit-scrollbar {
+  height: 20px;
+}
+.orders-horizontal-scroll::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 8px;
+}
+.orders-horizontal-scroll::-webkit-scrollbar-thumb {
+  min-width: 64px;
+  border: 3px solid var(--muted);
+  border-radius: 8px;
+  background: #818cf8;
+  cursor: grab;
+}
+.orders-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a5b4fc;
+}
+.orders-horizontal-scroll::-webkit-scrollbar-thumb:active {
+  background: #6366f1;
+  cursor: grabbing;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .orders-horizontal-scroll {
+    scrollbar-width: auto;
+    scrollbar-color: #818cf8 var(--muted);
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────
    TRANSITIONS & ANIMATIONS
    ───────────────────────────────────────────────────────────────── */
