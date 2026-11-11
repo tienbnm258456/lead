@@ -255,30 +255,30 @@ body {
 }
 
 .orders-horizontal-scroll::-webkit-scrollbar {
-  height: 20px;
+  height: 12px;
 }
 .orders-horizontal-scroll::-webkit-scrollbar-track {
   background: var(--muted);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 .orders-horizontal-scroll::-webkit-scrollbar-thumb {
   min-width: 64px;
-  border: 3px solid var(--muted);
-  border-radius: 8px;
-  background: #818cf8;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
+  background: #64748b;
   cursor: grab;
 }
 .orders-horizontal-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a5b4fc;
+  background: #94a3b8;
 }
 .orders-horizontal-scroll::-webkit-scrollbar-thumb:active {
-  background: #6366f1;
+  background: #818cf8;
   cursor: grabbing;
 }
 @supports not selector(::-webkit-scrollbar) {
   .orders-horizontal-scroll {
-    scrollbar-width: auto;
-    scrollbar-color: #818cf8 var(--muted);
+    scrollbar-width: thin;
+    scrollbar-color: #64748b var(--muted);
   }
 }
 
