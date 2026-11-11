@@ -1,3 +1,5 @@
+import { getCrmStatusDisplay } from './crm-status-display';
+
 /** Annual Google Drive files and monthly product tabs. See google_sheets_setup.md. */
 export interface SheetDestination {
   year: number; sheetName: string; spreadsheetUrl: string; totalRows: number;
@@ -11,7 +13,7 @@ export interface OrderForExport {
   delivery_address: string; total_price: string | number;
   selected_package: string | null; selected_size: string | null;
   url_page?: string | null;
-  landing_slug: string | null; sync_status: string; retailcrm_id: number | null;
+  landing_slug: string | null; crm_status?: string | null; retailcrm_id: number | null;
   items_json?: string; created_at: Date | string;
 }
 export const SHEET_HEADERS = [
@@ -30,7 +32,6 @@ interface ExportGroup {
   year: number; month: string; productKey: string; productName: string;
   orders: { id: number; rows: Cell[][]; rowKeys: string[] }[];
 }
-const STATUS: Record<string, string> = { SUCCESS: 'Thành công', PENDING: 'Chờ đồng bộ', FAILED: 'Lỗi', TIMEOUT: 'Hết thời gian' };
 function config() {
   const url = process.env.GOOGLE_APPS_SCRIPT_URL;
   const secret = process.env.GOOGLE_APPS_SCRIPT_SECRET;
@@ -62,10 +63,11 @@ export function groupSheetOrders(orders: OrderForExport[], timeZone = process.en
       group = { year, month, productKey, productName, orders: [] };
       groups.set(key, group);
     }
+    const crm = getCrmStatusDisplay(order.crm_status);
     const rows = items.map((item, index): Cell[] => [
       order.customer_name, order.customer_phone, '', 'không',
       created.toLocaleString('vi-VN', { timeZone }), order.external_id,
-      item.productName || productName, STATUS[order.sync_status] || order.sync_status,
+      item.productName || productName, crm.code ? crm.label : crm.groupLabel,
       item.variantLabel || item.productName || '', item.quantity || 1,
       Number(item.initialPrice) || 0, Number(item.deliveryFee) || 0,
       index === 0 ? Number(order.total_price) : 0, order.delivery_address, 'Chưa thanh toán',

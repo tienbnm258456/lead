@@ -16,6 +16,7 @@ import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-det
 import { OrderAmountCards } from '@/components/order-amount-cards';
 import { ViewportTableScroll } from '@/components/viewport-table-scroll';
 import type { OrderAmounts } from '@/lib/order-amounts';
+import { landingTones } from '@/lib/ladipage-order';
 
 interface Order extends OrderDetailData {
   id: number;
@@ -32,6 +33,7 @@ interface Order extends OrderDetailData {
   crm_status: string | null;
   url_page: string | null;
   landing_slug: string | null;
+  xml_id_label?: string | null;
   exported_at: string | null;
   created_at: string;
 }
@@ -57,6 +59,7 @@ interface FormProduct {
   name: string;
   slug: string;
   xml_id: string | null;
+  tone_xml_ids?: unknown;
   has_sizes: boolean;
   sizes: { label: string; options: string[] } | null;
   variants: FormVariant[];
@@ -158,13 +161,14 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+  const [formData, setFormData] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // ── Cascading form state ──
   const [formLandingPages, setFormLandingPages] = useState<FormLandingPage[]>([]);
   const [formLoadingLP, setFormLoadingLP] = useState(false);
+  const [selectedTone, setSelectedTone] = useState('');
   const [selectedLPId, setSelectedLPId] = useState<number | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
@@ -173,6 +177,7 @@ export default function OrdersPage() {
   const selectedProduct = selectedLP?.product;
   const variants = selectedProduct?.variants || [];
   const selectedVariant = variants.find(v => v.id === selectedVariantId);
+  const tones = landingTones(selectedProduct?.tone_xml_ids);
   const hasSizes = selectedProduct?.has_sizes && selectedProduct?.sizes?.options?.length;
 
   const { data, isPending: isLoading, isFetching } = useQuery({
@@ -256,14 +261,16 @@ export default function OrdersPage() {
   const closeForm = () => {
     setShowForm(false);
     setEditOrder(null);
-    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
   };
 
   const openCreateForm = async () => {
     setEditOrder(null);
-    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', url_page: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
+    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -282,7 +289,8 @@ export default function OrdersPage() {
   const openEditForm = (o: Order) => {
     if (!canEditOrders) return;
     setEditOrder(o);
-    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, url_page: o.url_page || '', total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
+    setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
+    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -290,6 +298,7 @@ export default function OrdersPage() {
 
   // Handle landing page selection → reset variant + size
   const handleSelectLP = (lpId: number | null) => {
+    setSelectedTone('');
     setSelectedLPId(lpId);
     setSelectedVariantId(null);
     if (lpId) {
@@ -323,7 +332,7 @@ export default function OrdersPage() {
     if (editOrder) {
       updateMutation.mutate({ id: editOrder.id, payload: formData });
     } else {
-      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId });
+      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId, selected_tone: selectedTone });
     }
   };
 
@@ -370,7 +379,7 @@ export default function OrdersPage() {
     bulkDeleteMutation.mutate(Array.from(selectedIds));
   };
 
-  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!hasSizes || formData.selected_size)));
+  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!hasSizes || formData.selected_size) && (!tones.length || selectedTone)));
 
   const handleSort = useCallback((col: string) => {
     setFilters(p => ({
@@ -764,9 +773,10 @@ export default function OrdersPage() {
                           onClick={() => setFilters(p => ({ ...p, landingSlug: order.landing_slug!, page: 1 }))}
                           className="group/lp inline-flex items-center gap-1 text-sm transition-colors cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-400"
                           style={{ color: 'var(--card-foreground)' }}
-                          title={`Lọc theo: ${landingPageMap.get(order.landing_slug)?.name || order.landing_slug}`}
+                          title={'Lọc theo: ' + (landingPageMap.get(order.landing_slug)?.name || order.landing_slug)}
                         >
                           {landingPageMap.get(order.landing_slug)?.name || order.landing_slug}
+                          {order.xml_id_label && ' · ' + order.xml_id_label}
                           <Filter className="h-3 w-3 opacity-0 group-hover/lp:opacity-50 transition-opacity" />
                         </button>
                       ) : (
@@ -986,13 +996,6 @@ export default function OrdersPage() {
                   placeholder="Địa chỉ giao hàng" value={formData.delivery_address} onChange={e => setFormData(p => ({ ...p, delivery_address: e.target.value }))} />
               </div>
 
-              {!editOrder && <div>
-                <label htmlFor="order-url-page" className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>URL Sản phẩm <span className="text-xs font-normal">(không bắt buộc)</span></label>
-                <input id="order-url-page" type="url" className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                  placeholder="https://example.com/landing-page" value={formData.url_page} onChange={e => setFormData(p => ({ ...p, url_page: e.target.value }))} />
-              </div>}
-
               {/* ── Product Cascade (only for new orders) ── */}
               {!editOrder && (
                 <>
@@ -1037,6 +1040,17 @@ export default function OrdersPage() {
                         ))}
                       </select>
                     </div>
+                  )}
+
+                  {tones.length > 0 && (
+                    <label className="grid gap-1.5 text-sm font-semibold">
+                      Tên XML ID
+                      <select required value={selectedTone} onChange={e => setSelectedTone(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3">
+                        <option value="">— Chọn tên XML ID —</option>
+                        {tones.map(tone => <option key={tone.label} value={tone.label}>{tone.label}</option>)}
+                      </select>
+                    </label>
                   )}
 
                   {/* Size / option select (visible if product has sizes AND variant selected) */}

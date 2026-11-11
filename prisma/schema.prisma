@@ -46,6 +46,7 @@ model Product {
   name   String @db.VarChar(255) /// Tên sản phẩm hiển thị (VD: "Đai lưng", "Kem tẩy lông")
   slug   String @unique @db.VarChar(100) /// Định danh URL-safe, tự tạo từ tên (VD: "dai-lung-abc123")
   xml_id String? @db.VarChar(255) /// Mã sản phẩm trên RetailCRM (do đối tác cung cấp, điền sau)
+  tone_xml_ids Json?
 
   /// Tùy chọn phụ (ngoài gói sản phẩm): size, trọng lượng, màu sắc...
   /// - has_sizes = true → sản phẩm có tùy chọn phụ
@@ -112,6 +113,7 @@ model ProductVariant {
 
 /// Đăng ký Landing Page — mỗi trang có 1 api_key riêng
 model LandingPage {
+  landing_url String? @db.VarChar(2048)
   deleted_at DateTime?
   created_by_id Int?
   group_id Int?

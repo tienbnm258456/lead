@@ -50,12 +50,65 @@ export async function readLandingBody(request: Request): Promise<Record<string, 
 }
 const normalize = (value: string) => value.toLowerCase().normalize('NFKC')
   .replace(/[‘’ʻʼ՚ʻʼ']/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
-export function resolveLandingItems(variants: LandingVariant[], packageValue: unknown, sizeValue: unknown, product: { name: string; xml_id: string | null }) {
+export type LandingTone = { label: string; xmlId: string };
+type LandingProduct = { name: string; xml_id: string | null; tone_xml_ids?: unknown };
+
+export function landingTones(value: unknown): LandingTone[] {
+  return Array.isArray(value) ? value.filter((tone): tone is LandingTone =>
+    Boolean(tone && typeof tone.label === 'string' && typeof tone.xmlId === 'string')) : [];
+}
+
+export function isLandingXmlId(value: unknown): value is string {
+  return typeof value === 'string' && Boolean(value.trim()) && value.trim().length <= 255 && !/[,\r\n]/.test(value);
+}
+
+export function parseLandingTones(value: unknown): LandingTone[] {
+  if (value === undefined || (Array.isArray(value) && !value.length)) return [];
+  const tones = landingTones(value).map(tone => ({ label: tone.label.trim(), xmlId: tone.xmlId.trim() }));
+  if (tones.length < 2 || !Array.isArray(value) || value.length !== tones.length ||
+    tones.some(tone => !normalize(tone.label) || tone.label.length > 100 || !isLandingXmlId(tone.xmlId)) ||
+    new Set(tones.map(tone => normalize(tone.label))).size !== tones.length ||
+    new Set(tones.map(tone => tone.xmlId)).size !== tones.length) {
+    throw new SelectionError('Nhập ít nhất hai dòng. Mỗi dòng cần một tên và XML ID riêng, đúng với cấu hình trên landing page.');
+  }
+  return tones;
+}
+
+export function parseLandingUrl(value: unknown): string | null {
+  const text = scalar(value);
+  if (!text) return null;
+  const url = URL.canParse(text) ? new URL(text) : null;
+  if (!url || !/^https?:\/\//i.test(text) || !['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.href.length > 2048) {
+    throw new SelectionError('URL landing page phải là địa chỉ http:// hoặc https:// hợp lệ.');
+  }
+  return url.href;
+}
+
+export function readLandingSelections(body: Record<string, unknown>, product: LandingProduct) {
+  const packageValue = body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo;
+  const usesTones = landingTones(product.tone_xml_ids).length > 0;
+  return {
+    packages: selections(body.products || packageValue),
+    sizes: selections(body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc),
+    tone: usesTones ? body.tone : undefined,
+  };
+}
+
+export function resolveLandingItems(variants: LandingVariant[], packageValue: unknown, sizeValue: unknown, product: LandingProduct, toneValue?: unknown) {
   if (!variants.length || variants.some(v => !Number.isFinite(v.price) || v.price < 0 || !Number.isFinite(v.delivery_fee) || v.delivery_fee < 0)) {
     throw new SelectionError('Giá hoặc phí ship cấu hình không hợp lệ');
   }
   const packages = selections(packageValue);
   const sizes = selections(sizeValue);
+  const tones = landingTones(product.tone_xml_ids);
+  let tone: LandingTone | undefined;
+  if (tones.length) {
+    const chosen = selections(toneValue);
+    if (chosen.length !== 1) throw new SelectionError('Vui lòng chọn đúng một tone màu.');
+    tone = tones.find(option => normalize(option.label) === normalize(chosen[0]));
+    if (!tone) throw new SelectionError('Không tìm thấy tone màu đã cấu hình: ' + chosen[0]);
+  }
+  if (tone && !packages.length && variants.length > 1) throw new SelectionError('Thiếu gói mua. Cấu hình LadiPage gửi gói qua trường products.');
   const selected = packages.length ? packages : [''];
   const matches = selected.map(label => {
     let candidates = variants;
@@ -66,7 +119,7 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
     }
     if (candidates.length !== 1) throw new SelectionError('Gói chưa được cấu hình duy nhất: ' + label);
     const variant = candidates[0];
-    const xmlId = product.xml_id?.trim() || variant.xml_id?.trim() || generateOfferXmlId(variant.id);
+    const xmlId = tone?.xmlId || product.xml_id?.trim() || variant.xml_id?.trim() || generateOfferXmlId(variant.id);
     return { variant, xmlId };
   });
   const deliveryFee = Math.max(0, ...matches.map(m => m.variant.delivery_fee));
@@ -74,7 +127,8 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
     xmlId, quantity: 1, initialPrice: variant.price, productName: product.name,
     variantLabel: variant.label, promotion: variant.promotion || undefined,
     size: sizes.join(' + ') || undefined,
+    ...(tone && { tone: tone.label }),
     deliveryFee: index === 0 ? deliveryFee : 0,
   }));
-  return { items, deliveryFee, totalPrice: items.reduce((sum, item) => sum + item.initialPrice * item.quantity, deliveryFee) };
+  return { items, deliveryFee, selectedOption: [tone?.label, ...sizes].filter(Boolean).join(' | ') || null, totalPrice: items.reduce((sum, item) => sum + item.initialPrice * item.quantity, deliveryFee) };
 }

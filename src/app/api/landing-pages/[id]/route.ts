@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+import { isLandingXmlId, parseLandingTones, parseLandingUrl, SelectionError } from '@/lib/ladipage-order';
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -36,8 +38,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   try {
     const body = await request.json();
-    if (body.xml_id !== undefined && (typeof body.xml_id !== 'string' || !body.xml_id.trim() || body.xml_id.trim().length > 255 || /[,\r\n]/.test(body.xml_id))) {
-      return NextResponse.json({ error: 'Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng' }, { status: 400 });
+    const tones = parseLandingTones(body.tone_xml_ids);
+    const landingUrl = body.landing_url === undefined ? undefined : parseLandingUrl(body.landing_url);
+    if (!tones.length && (body.xml_id !== undefined || body.tone_xml_ids !== undefined) && !isLandingXmlId(body.xml_id)) {
+      throw new SelectionError('Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng.');
     }
     if (Array.isArray(body.variants)) {
       const invalidPromotion = body.variants.findIndex((v: Record<string, unknown> | null) =>
@@ -79,7 +83,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       // 1. Update landing page fields
       const updateLP: Record<string, unknown> = {};
       const updateProduct: Record<string, unknown> = {};
-      if (body.xml_id !== undefined) updateProduct.xml_id = body.xml_id.trim();
+      if (body.tone_xml_ids !== undefined) updateProduct.tone_xml_ids = tones.length ? tones : Prisma.DbNull;
+      if (tones.length || body.xml_id !== undefined) updateProduct.xml_id = tones.length ? null : body.xml_id.trim();
+      if (landingUrl !== undefined) updateLP.landing_url = landingUrl;
 
       if (body.name !== undefined) {
         updateLP.name = body.name.trim();
@@ -177,6 +183,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof SelectionError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error updating landing page:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

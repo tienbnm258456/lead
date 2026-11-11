@@ -1,4 +1,4 @@
-import { ensureOfferXmlIds, readLandingBody, scalar, selections, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
+import { ensureOfferXmlIds, readLandingBody, scalar, readLandingSelections, landingTones, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
@@ -115,10 +115,9 @@ export const POST = withLogger(async function POST(request: NextRequest) {
     const phone = scalar(body.phone || body.Telefon || body.telefon || body['Telefon raqami'] || body.telefon_raqami || body.sdt || '');
     const address = scalar(body.address || body.Manzil || body.manzil || body.dia_chi || body['Địa chỉ'] || '');
 
-    // "products" field from POS mapping — contains the selected package/variant info
-    const packageSelections = selections(body.products || body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo || '');
-    const packageOption = packageSelections.join(" | ");
-    const sizeSelections = selections(body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc || '');
+    // Products identifies the package. Tone-mapped products also send the tone separately.
+    const { packages: packageSelections, sizes: sizeSelections, tone } = readLandingSelections(body, product);
+    const packageOption = packageSelections.join(' | ');
     const sizeOption = sizeSelections.join(" | ");
 
     // ── Validate required fields ─────────────────────────────────
@@ -136,7 +135,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
     }
 
     // ── Match variant ────────────────────────────────────────────
-    const variants = (product.xml_id ? product.variants : await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
+    const variants = (product.xml_id || landingTones(product.tone_xml_ids).length ? product.variants : await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
       id: v.id,
       label: v.label,
       quantity: v.quantity,
@@ -158,7 +157,7 @@ export const POST = withLogger(async function POST(request: NextRequest) {
     let resolved;
     let selectionError: string | null = null;
     try {
-      resolved = resolveLandingItems(variants, packageSelections, sizeSelections, product);
+      resolved = resolveLandingItems(variants, packageSelections, sizeSelections, product, tone);
     } catch (error) {
       if (!(error instanceof SelectionError)) throw error;
       selectionError = error.message;
@@ -179,12 +178,12 @@ export const POST = withLogger(async function POST(request: NextRequest) {
         items_json: JSON.stringify(items.map((item, index) => index === 0 ? { ...item, rawPayload: body } : item)),
         total_price: totalPrice,
         source: 'ladipage',
-        url_page: scalar(body.url_page) || null,
+        url_page: scalar(body.url_page) || landingPage.landing_url || null,
         landing_slug: product.slug,
         group_id: landingPage.group_id,
         landing_page_id: landingPage.id,
         selected_package: packageOption || resolved?.items.map(item => item.variantLabel).join(" | ") || null,
-        selected_size: sizeOption || null,
+        selected_size: resolved?.selectedOption || [typeof tone === 'string' ? tone.trim() : '', sizeOption].filter(Boolean).join(' | ') || null,
         sync_status: selectionError ? 'FAILED' : 'PENDING',
         sync_message: selectionError,
       },

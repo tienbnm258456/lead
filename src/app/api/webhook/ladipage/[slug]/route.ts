@@ -1,4 +1,4 @@
-import { scalar } from '@/lib/ladipage-order';
+import { scalar, landingTones, readLandingSelections, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
 import { ensureOfferXmlIds } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -163,7 +163,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // ── Match variant ────────────────────────────────────────────────
-    const variants = (await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
+    const usesTones = landingTones(product.tone_xml_ids).length > 0;
+    const variants = (usesTones ? product.variants : await ensureOfferXmlIds(prisma, product.variants)).map(v => ({
       id: v.id,
       label: v.label,
       quantity: v.quantity,
@@ -171,6 +172,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       delivery_fee: Number(v.delivery_fee),
       size: v.size,
       xml_id: v.xml_id,
+      promotion: v.promotion,
     }));
 
     if (variants.length === 0) {
@@ -181,13 +183,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const matchedVariant = findMatchingVariant(variants, packageOption, sizeOption);
-
-    console.log(`[LadiPage Webhook] Matched variant: "${matchedVariant.label}" (price: ${matchedVariant.price}, qty: ${matchedVariant.quantity})`);
-
-    // ── Determine xmlId ──────────────────────────────────────────────
-    const xmlId = product.xml_id || matchedVariant.xml_id || 'PENDING_XML_ID';
-    const totalPrice = matchedVariant.price + matchedVariant.delivery_fee;
+    let items: ReturnType<typeof resolveLandingItems>['items'];
+    let deliveryFee;
+    let totalPrice;
+    let selectedPackage;
+    let selectedOption;
+    if (usesTones) {
+      const { packages, sizes, tone } = readLandingSelections(body, product);
+      const resolved = resolveLandingItems(variants, packages, sizes, product, tone);
+      items = resolved.items;
+      deliveryFee = resolved.deliveryFee;
+      totalPrice = resolved.totalPrice;
+      selectedPackage = items.map(item => item.variantLabel).join(' | ');
+      selectedOption = resolved.selectedOption;
+    } else {
+      const matchedVariant = findMatchingVariant(variants, packageOption, sizeOption);
+      const xmlId = product.xml_id || matchedVariant.xml_id || 'PENDING_XML_ID';
+      deliveryFee = matchedVariant.delivery_fee;
+      totalPrice = matchedVariant.price + deliveryFee;
+      selectedPackage = packageOption || matchedVariant.label;
+      selectedOption = sizeOption || matchedVariant.size || null;
+      items = [{
+        xmlId, quantity: matchedVariant.quantity, initialPrice: matchedVariant.price,
+        productName: product.name, variantLabel: matchedVariant.label,
+        size: matchedVariant.size || undefined, promotion: undefined, deliveryFee,
+      }];
+    }
 
     // ── Create order in DB ───────────────────────────────────────────
     const order = await prisma.order.create({
@@ -196,21 +217,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         customer_name: name,
         customer_phone: phone,
         delivery_address: address,
-        items_json: JSON.stringify([{
-          xmlId,
-          quantity: matchedVariant.quantity,
-          initialPrice: matchedVariant.price,
-          productName: product.name,
-          variantLabel: matchedVariant.label,
-          size: matchedVariant.size || undefined,
-          deliveryFee: matchedVariant.delivery_fee,
-        }]),
+        items_json: JSON.stringify(items),
         total_price: totalPrice,
         source: 'ladipage',
         url_page: scalar(body.url_page) || null,
         landing_slug: slug,
-        selected_package: packageOption || matchedVariant.label,
-        selected_size: sizeOption || matchedVariant.size || null,
+        selected_package: selectedPackage,
+        selected_size: selectedOption,
         sync_status: 'PENDING',
       },
     });
@@ -230,17 +243,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       firstName: name,
       phone,
       delivery: {
-        cost: Number(matchedVariant.delivery_fee) || 0,
+        cost: deliveryFee,
         address: {
           countryIso: 'UZ',
           text: address,
         },
       },
-      items: [{
-        xmlId,
-        quantity: matchedVariant.quantity,
-        initialPrice: matchedVariant.price,
-      }],
+      items: usesTones ? items : items.map(({ xmlId, quantity, initialPrice }) => ({ xmlId, quantity, initialPrice })),
     };
 
     const syncResult = await createRetailCrmOrder(payload);
@@ -283,6 +292,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       syncStatus: dbSyncStatus,
     });
   } catch (error) {
+    if (error instanceof SelectionError) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     console.error(`[LadiPage Webhook] Error for slug "${slug}":`, error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

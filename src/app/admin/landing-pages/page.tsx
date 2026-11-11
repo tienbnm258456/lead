@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { queryScope } from '@/lib/query-scope';
 import { parseUZS } from '@/lib/money';
+import { isLandingXmlId, landingTones, parseLandingTones, type LandingTone } from '@/lib/ladipage-order';
 
 interface Variant {
   id?: number;
@@ -29,6 +30,7 @@ interface SizesConfig {
 
 interface Product {
   xml_id: string | null;
+  tone_xml_ids: LandingTone[] | null;
   id: number;
   name: string;
   slug: string;
@@ -41,6 +43,7 @@ interface LandingPage {
   id: number;
   name: string;
   api_key: string;
+  landing_url: string | null;
   product_id: number;
   product: Product;
   active: boolean;
@@ -73,6 +76,8 @@ async function fetchLandingPages(search: string): Promise<LandingPagesResponse> 
 
 const formatUZS = (val: number) => new Intl.NumberFormat('uz-UZ').format(val) + ' UZS';
 
+const emptyTones = (): LandingTone[] => [{ label: '', xmlId: '' }, { label: '', xmlId: '' }];
+
 const emptyVariant = (): FormVariant => ({ label: '', quantity: 1, price: '', delivery_fee: '0', promotion: '' });
 
 export default function LandingPagesPage() {
@@ -94,6 +99,9 @@ export default function LandingPagesPage() {
   const [editItem, setEditItem] = useState<LandingPage | null>(null);
   const [formName, setFormName] = useState('');
   const [formXmlId, setFormXmlId] = useState('');
+  const [formUseTones, setFormUseTones] = useState(false);
+  const [formTones, setFormTones] = useState<LandingTone[]>(emptyTones);
+  const [formLandingUrl, setFormLandingUrl] = useState('');
   const [formVariants, setFormVariants] = useState<FormVariant[]>([emptyVariant()]);
   const [formHasSizes, setFormHasSizes] = useState(false);
   const [formOptionLabel, setFormOptionLabel] = useState('Size');
@@ -171,14 +179,14 @@ export default function LandingPagesPage() {
 
   // ── Form helpers ──────────────────────────────────────────
   const closeForm = () => {
-    setShowForm(false); setEditItem(null); setFormName(''); setFormXmlId('');
+    setShowForm(false); setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseTones(false); setFormTones(emptyTones()); setFormLandingUrl('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
     setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
   };
 
   const openCreateForm = () => {
     setFormGroup('');
-    setEditItem(null); setFormName(''); setFormXmlId('');
+    setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseTones(false); setFormTones(emptyTones()); setFormLandingUrl('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
     setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
     setShowForm(true);
@@ -189,6 +197,10 @@ export default function LandingPagesPage() {
     setEditItem(page);
     setFormName(page.name);
     setFormXmlId(page.product.xml_id || '');
+    const tones = landingTones(page.product.tone_xml_ids);
+    setFormUseTones(tones.length > 0);
+    setFormTones(tones.length ? tones : emptyTones());
+    setFormLandingUrl(page.landing_url || '');
     setFormVariants(
       page.product.variants.map(v => ({
         id: v.id,
@@ -238,7 +250,9 @@ export default function LandingPagesPage() {
 
     const payload = {
       name: formName,
-      xml_id: formXmlId.trim(),
+      xml_id: formUseTones ? null : formXmlId.trim(),
+      tone_xml_ids: formUseTones ? formTones : [],
+      landing_url: formLandingUrl.trim(),
       ...(currentRole === 'ADMIN' ? { group_id: formGroup ? Number(formGroup) : null } : {}),
       variants,
       has_sizes: formHasSizes,
@@ -253,7 +267,15 @@ export default function LandingPagesPage() {
     }
   };
 
-  const isFormValid = formName.trim() && formXmlId.trim() && formXmlId.trim().length <= 255 && !/[,\r\n]/.test(formXmlId) && formVariants.length > 0 && formVariants.every(v => v.promotion.trim() && v.promotion.trim().length <= 100 && v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
+  let validXmlIds = isLandingXmlId(formXmlId);
+  if (formUseTones) {
+    try {
+      validXmlIds = parseLandingTones(formTones).length > 0;
+    } catch {
+      validXmlIds = false;
+    }
+  }
+  const isFormValid = formName.trim() && validXmlIds && formVariants.length > 0 && formVariants.every(v => v.promotion.trim() && v.promotion.trim().length <= 100 && v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
     && (!formHasSizes || formSizes.length > 0);
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
@@ -364,7 +386,14 @@ export default function LandingPagesPage() {
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold truncate" style={{ color: 'var(--foreground)' }}>{page.name}</h3>
+                    <h3 className="text-base font-bold truncate" style={{ color: 'var(--foreground)' }}>
+                      {page.landing_url ? (
+                        <a href={page.landing_url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 hover:text-indigo-500 focus-visible:underline after:absolute after:inset-0 after:z-[1] after:rounded-xl">
+                          <span className="truncate">{page.name}</span><ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        </a>
+                      ) : page.name}
+                    </h3>
                     {page.active ? (
                       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                         <CheckCircle className="h-3 w-3" /> Active
@@ -376,7 +405,7 @@ export default function LandingPagesPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="relative z-[2] flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <button onClick={() => openEditForm(page)} className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors" style={{ color: 'var(--muted-foreground)' }}
                     onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }} title="Sửa">
                     <Edit2 className="h-3.5 w-3.5" />
@@ -429,7 +458,7 @@ export default function LandingPagesPage() {
               )}
 
               {/* API Key */}
-              <div className="space-y-1.5">
+              <div className="relative z-[2] space-y-1.5">
                 <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
                   <Key className="h-3 w-3" /> API Key
                 </label>
@@ -452,7 +481,7 @@ export default function LandingPagesPage() {
               </div>
 
               {/* Webhook URL */}
-              <div className="mt-2.5 space-y-1">
+              <div className="relative z-[2] mt-2.5 space-y-1">
                 <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--muted-foreground)' }}>
                   <ExternalLink className="h-3 w-3" /> Webhook URL
                 </label>
@@ -513,13 +542,56 @@ export default function LandingPagesPage() {
 
             {/* ── Content (scrollable) ── */}
             <div className="flex-1 overflow-y-auto px-7 space-y-6">
-              <div>
-                <label htmlFor="landing-xml-id" className="mb-1.5 block text-sm font-semibold">XML ID do đối tác cấp <span className="text-red-500">*</span></label>
-                <input id="landing-xml-id" maxLength={255} className="w-full rounded-lg border px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                  placeholder="Ví dụ: 3B5ggmZQg35w2QgJWnoZ21" value={formXmlId} onChange={e => setFormXmlId(e.target.value)} />
-                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>Nhập mã gốc dùng chung cho các gói. Hệ thống tự ghép khuyến mại và size khi gửi CRM.</p>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" checked={formUseTones} onChange={e => setFormUseTones(e.target.checked)} />
+                  Sản phẩm có nhiều XML ID
+                </label>
+                {formUseTones ? (
+                  <>
+                    {formTones.map((tone, index) => (
+                      <div key={index} className="grid gap-2 sm:grid-cols-2">
+                        <label className="grid gap-1 text-sm">
+                          Tên XML ID {index + 1}
+                          <input maxLength={100} placeholder="Ví dụ: Ivory White" value={tone.label}
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2"
+                            onChange={e => setFormTones(previous => previous.map((value, i) => i === index ? { ...value, label: e.target.value } : value))} />
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          XML ID {index + 1}
+                          <input maxLength={255} value={tone.xmlId}
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 font-mono"
+                            onChange={e => setFormTones(previous => previous.map((value, i) => i === index ? { ...value, xmlId: e.target.value } : value))} />
+                        </label>
+                        {formTones.length > 2 && (
+                          <button type="button" className="justify-self-start text-sm text-red-500"
+                            onClick={() => setFormTones(previous => previous.filter((_, i) => i !== index))}>
+                            Xóa dòng {index + 1}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setFormTones(previous => [...previous, { label: '', xmlId: '' }])}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-indigo-500">
+                      <Plus className="h-4 w-4" /> Thêm XML ID
+                    </button>
+                    <p className="text-xs text-[var(--muted-foreground)]">Trên LadiPage, gửi tên gói mua qua products và tên XML ID đã chọn qua tone.</p>
+                  </>
+                ) : (
+                  <label className="grid gap-1.5 text-sm font-semibold">
+                    XML ID do đối tác cấp
+                    <input maxLength={255} className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono"
+                      placeholder="Nhập XML ID gốc" value={formXmlId} onChange={e => setFormXmlId(e.target.value)} />
+                    <span className="text-xs font-normal text-[var(--muted-foreground)]">Hệ thống ghép khuyến mại và size khi gửi CRM.</span>
+                  </label>
+                )}
               </div>
+              <label className="grid gap-1.5 text-sm font-semibold">
+                URL landing page
+                <input type="url" maxLength={2048} value={formLandingUrl} onChange={e => setFormLandingUrl(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3"
+                  placeholder="https://example.com/san-pham" />
+              </label>
               {currentRole === 'ADMIN' && <label className="block text-sm font-semibold">Nhóm sở hữu
                 <select className="mt-2 w-full rounded-lg border p-3" style={{ background: 'var(--card)', color: 'var(--foreground)' }} value={formGroup} onChange={e => setFormGroup(e.target.value)}>
                   <option value="">Chỉ Quản trị viên / chưa phân công</option>{groups.map(group => <option key={group.id} value={group.id} disabled={!group.assignable}>{group.display_name}{!group.assignable ? ' (không có Quản lý hoạt động)' : ''}</option>)}

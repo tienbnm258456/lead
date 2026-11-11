@@ -6,6 +6,7 @@ import ExcelJS from 'exceljs';
 import { requireAuth } from '@/lib/require-auth';
 import { orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
 import { orderIdsForXmlId } from '@/lib/order-xml-filter';
+import { getCrmStatusDisplay } from '@/lib/crm-status-display';
 
 /**
  * GET /api/orders/export
@@ -80,16 +81,12 @@ export async function GET(request: NextRequest) {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Lead Management System';
     workbook.created = new Date();
+    const timeZone = process.env.SHEETS_EXPORT_TIMEZONE || 'Asia/Bangkok';
+    const dayFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    });
 
-    const today = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '_');
-
-    // ── Status mapping: DB → Russian label ──
-    const STATUS_MAP: Record<string, string> = {
-      SUCCESS: 'Thành công',
-      PENDING: 'Chờ đồng bộ',
-      FAILED: 'Lỗi',
-      TIMEOUT: 'Hết thời gian',
-    };
+    const today = new Date().toLocaleDateString('vi-VN', { timeZone, day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '_');
 
     // ── Parse items_json helper ──
     const parseItems = (json: string) => {
@@ -109,7 +106,7 @@ export async function GET(request: NextRequest) {
       { header: 'Ngày đặt hàng', key: 'orderDate', width: 20 },
       { header: 'ExternalId đơn hàng', key: 'orderExtId', width: 18 },
       { header: 'Loại đơn hàng', key: 'orderType', width: 22 },
-      { header: 'Trạng thái đơn hàng', key: 'orderStatus', width: 16 },
+      { header: 'Trạng thái đơn hàng', key: 'orderStatus', width: 34 },
       { header: 'Tên sản phẩm', key: 'productName', width: 30 },
       { header: 'Số lượng sản phẩm', key: 'quantity', width: 14 },
       { header: 'Giá sản phẩm', key: 'salePrice', width: 18 },
@@ -137,6 +134,7 @@ export async function GET(request: NextRequest) {
     };
 
     const addOrderRow = (ws: ExcelJS.Worksheet, order: typeof orders[0], index: number) => {
+      const crm = getCrmStatusDisplay(order.crm_status);
       return parseItems(order.items_json).map((item: { xmlId?: string; productName?: string; variantLabel?: string; quantity?: number; initialPrice?: number; deliveryFee?: number }, itemIndex: number) => {
       const deliveryFee = Number(item.deliveryFee) || 0;
       const productPrice = Number(item.initialPrice) || 0;
@@ -151,10 +149,10 @@ export async function GET(request: NextRequest) {
         phone: order.customer_phone,
         email: '',
         emailSub: 'không',
-        orderDate: new Date(order.created_at).toLocaleString('vi-VN'),
+        orderDate: order.created_at.toLocaleString('vi-VN', { timeZone }),
         orderExtId: order.external_id,
         orderType: item.productName || order.landing_slug || '',
-        orderStatus: STATUS_MAP[order.sync_status] || order.sync_status,
+        orderStatus: crm.code ? crm.label : crm.groupLabel,
         productName: item.variantLabel || item.productName || '',
         quantity: item.quantity || 1,
         salePrice: productPrice,
@@ -184,22 +182,7 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      // Tô màu trạng thái
-      const statusCell = row.getCell('orderStatus');
-      switch (order.sync_status) {
-        case 'SUCCESS':
-          statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
-          break;
-        case 'FAILED':
-          statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
-          break;
-        case 'TIMEOUT':
-          statusCell.font = { color: { argb: 'FFEA580C' }, bold: true };
-          break;
-        case 'PENDING':
-          statusCell.font = { color: { argb: 'FFD97706' }, bold: true };
-          break;
-      }
+      row.getCell('orderStatus').font = { color: { argb: 'FF' + crm.color.slice(1).toUpperCase() }, bold: true };
 
       return row;
       });
@@ -240,6 +223,22 @@ export async function GET(request: NextRequest) {
       styleHeader(ws);
       orders.forEach((order, idx) => addOrderRow(ws, order, idx));
       formatSheet(ws);
+    }
+
+    const dailyTotals = new Map<string, number>();
+    for (const order of orders) {
+      const day = dayFormatter.format(order.created_at).split('/').reverse().join('-');
+      dailyTotals.set(day, (dailyTotals.get(day) ?? 0) + 1);
+    }
+    const dailySheet = workbook.addWorksheet('Tổng đơn theo ngày');
+    dailySheet.columns = [
+      { header: 'Ngày đặt hàng', key: 'day', width: 22 },
+      { header: 'Tổng đơn hàng', key: 'totalOrders', width: 20 },
+    ];
+    styleHeader(dailySheet);
+    dailySheet.autoFilter = { from: 'A1', to: 'B1' };
+    for (const [day, count] of [...dailyTotals].sort(([a], [b]) => a.localeCompare(b))) {
+      dailySheet.addRow([day.split('-').reverse().join('/'), count]);
     }
 
     // ── Mark as exported ──

@@ -1,4 +1,4 @@
-import { ensureOfferXmlIds, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
+import { ensureOfferXmlIds, readLandingSelections, landingTones, resolveLandingItems, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, type RetailCrmOrderPayload } from '@/lib/retailcrm';
@@ -64,11 +64,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (!page) return NextResponse.json({ error: 'Sản phẩm không còn tồn tại' }, { status: 400 });
       const body = items[0].rawPayload || {};
       try {
-        const resolved = resolveLandingItems((page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
-          body.products || body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo,
-          body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc, page.product);
+        const { packages, sizes, tone } = readLandingSelections(body, page.product);
+        const resolved = resolveLandingItems((page.product.xml_id || landingTones(page.product.tone_xml_ids).length ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants)).map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
+          packages, sizes, page.product, tone);
         items = resolved.items;
-        await prisma.order.update({ where: { id: orderId }, data: { items_json: JSON.stringify(items), total_price: resolved.totalPrice } });
+        await prisma.order.update({ where: { id: orderId }, data: { items_json: JSON.stringify(items), total_price: resolved.totalPrice, selected_size: resolved.selectedOption, selected_package: resolved.items.map(item => item.variantLabel).join(' | ') } });
       } catch (error) {
         if (error instanceof SelectionError) return NextResponse.json({ error: error.message, requiresReview: true }, { status: 422 });
         throw error;

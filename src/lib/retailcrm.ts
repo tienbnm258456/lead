@@ -23,6 +23,7 @@ export type RetailCrmSyncStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT';
 
 export interface RetailCrmOrderItem {
   xmlId: string;
+  tone?: string;
   promotion?: string;
   size?: string;
   variantLabel?: string;
@@ -75,6 +76,7 @@ export interface RetailCrmSyncResult {
  * Build the order JSON payload matching RetailCRM v5 format
  */
 export function formatOfferXmlId(item: RetailCrmOrderItem): string {
+  if (item.tone) return item.xmlId;
   const base = item.xmlId.replace(/^(XML\d+)_OFFER$/, '$1');
   const size = item.size?.split(/\s+\+\s+/).map(value => {
     const label = value.trim();

@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+import { isLandingXmlId, parseLandingTones, parseLandingUrl, SelectionError } from '@/lib/ladipage-order';
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -98,8 +100,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    if (true && (typeof body.xml_id !== 'string' || !body.xml_id.trim() || body.xml_id.trim().length > 255 || /[,\r\n]/.test(body.xml_id))) {
-      return NextResponse.json({ error: 'Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng' }, { status: 400 });
+    const tones = parseLandingTones(body.tone_xml_ids);
+    const landingUrl = body.landing_url === undefined ? undefined : parseLandingUrl(body.landing_url);
+    if (!tones.length && !isLandingXmlId(body.xml_id)) {
+      throw new SelectionError('Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng.');
     }
     if (Array.isArray(body.variants)) {
       const invalidPromotion = body.variants.findIndex((v: Record<string, unknown> | null) =>
@@ -148,7 +152,8 @@ export async function POST(request: NextRequest) {
       const product = await tx.product.create({
         data: {
           name: pageName,
-          xml_id: body.xml_id.trim(),
+          xml_id: tones.length ? null : body.xml_id.trim(),
+          tone_xml_ids: tones.length ? tones : Prisma.DbNull,
           group_id: groupId,
           slug,
           has_sizes: !!body.has_sizes,
@@ -181,6 +186,7 @@ export async function POST(request: NextRequest) {
         data: {
           name: pageName,
           api_key: apiKey,
+          landing_url: landingUrl,
           group_id: groupId,
           created_by_id: auth.user.id,
           product_id: product.id,
@@ -200,6 +206,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(landingPage, { status: 201 });
   } catch (error) {
+    if (error instanceof SelectionError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.error('Error creating landing page:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

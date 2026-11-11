@@ -4,16 +4,21 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const ts = require('typescript');
+const crmStatus = { exports: {} };
+const crmCode = ts.transpileModule(fs.readFileSync('src/lib/crm-status-display.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+new Function('module', 'exports', crmCode)(crmStatus, crmStatus.exports);
 function loadExporter(fetch) {
   const module = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync('src/lib/google-sheets.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  new Function('module', 'exports', 'fetch', code)(module, module.exports, fetch);
+  new Function('require', 'module', 'exports', 'fetch', code)(() => crmStatus.exports, module, module.exports, fetch);
   return module.exports;
 }
 function order(id, date = '2026-11-15T00:00:00Z', productName = 'Đai lưng', slug = 'dai-lung') {
   return { id, external_id: 'SAMPLE-' + id, customer_name: 'Nguyễn Văn A', customer_phone: '0977700000', delivery_address: 'Địa chỉ thử nghiệm',
     created_at: date, total_price: 878000, selected_package: '1+1 | 2+2', selected_size: 'S | L', landing_slug: slug,
-    sync_status: 'SUCCESS', retailcrm_id: null, url_page: 'https://example.test/vc-cream.store',
+    crm_status: 'complete', retailcrm_id: null, url_page: 'https://example.test/vc-cream.store',
     items_json: JSON.stringify([{ xmlId: '3B5ggmZQg35w2QgJWnoZ21', productName, variantLabel: 'Gói 1+1', quantity: 1, initialPrice: 299000, deliveryFee: 50000 },
       { xmlId: '3B5ggmZQg35w2QgJWnoZ21', productName, variantLabel: 'Gói 2+2', quantity: 1, initialPrice: 529000, deliveryFee: 0 }]) };
 }
@@ -83,12 +88,16 @@ test('backend + real Apps Script: preserve names, create yearly files, route pro
   assert.equal(google.files.size, 2); assert.deepEqual(ack, [1, 2, 3]);
   assert.deepEqual(result.destinations.map(d => d.sheetName), ['2026-11_Dai-lung', '2026-12_Kem', '2027-01_Dai-lung']);
   const first = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
+  const summary = [...google.files.values()][0].sheets.get('Tổng đơn theo ngày');
+  assert.deepEqual(summary.rows, [['Ngày đặt hàng', 'Tổng đơn hàng'], ['15/11/2026', 1], ['15/12/2026', 1]]);
+  assert.equal(first.rows[1][7], 'Đã giao hàng');
   assert.equal(first.rows[1][0], 'Nguyễn Văn A'); assert.equal(first.rows[1][1], '0977700000');
   assert.equal(first.rows[1][16], 'https://example.test/vc-cream.store');
   assert.equal(first.rows[1][17], '3B5ggmZQg35w2QgJWnoZ21');
   assert.equal(first.rows[1][12], 878000); assert.equal(first.rows[2][12], 0);
   assert.equal(first.rows[0][18], '_ExportRowId');
   assert.equal((await exporter.exportOrdersToGoogleSheets(data)).success, true);
+  assert.equal(summary.rows[1][1], 1);
   assert.equal(first.rows.length, 3); assert.equal(google.files.size, 2); assert.equal(google.locks(), 0);
 });
 test('same product display name with different identity uses distinct stable tabs', async () => {
@@ -96,6 +105,7 @@ test('same product display name with different identity uses distinct stable tab
   const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
   const result = await exporter.exportOrdersToGoogleSheets([order(1), order(2, undefined, 'Đai lưng', 'dai-lung-2')]);
   assert.equal(result.success, true); assert.notEqual(result.destinations[0].sheetName, result.destinations[1].sheetName);
+  assert.equal([...google.files.values()][0].sheets.get('Tổng đơn theo ngày').rows[1][1], 2);
 });
 test('old Apps Script or failed acknowledgement never marks orders', async () => {
   settings(); let marked = false;
@@ -136,12 +146,16 @@ test('empty export does not create files and schema mismatch cannot acknowledge 
   assert.equal(result.success, false); assert.equal(ack, false);
 });
 
-test('status colors apply to new rows and repair existing archives without changing values', async () => {
+test('legacy sync status colors can be repaired without changing archived values', async () => {
   settings(); const google = mockGoogle();
   const exporter = loadExporter(async (_, req) => ({ ok: true, json: async () => google.send(JSON.parse(req.body)) }));
-  const input = ['SUCCESS', 'FAILED', 'PENDING', 'TIMEOUT'].map((status, i) => ({ ...order(i + 1), sync_status: status }));
+  const input = [order(1), order(2), order(3), order(4)];
   assert.equal((await exporter.exportOrdersToGoogleSheets(input)).success, true);
   const sheet = [...google.files.values()][0].sheets.get('2026-11_Dai-lung');
+  const legacy = ['SUCCESS', 'FAILED', 'PENDING', 'TIMEOUT'];
+  sheet.rows.slice(1).forEach((row, index) => { row[7] = legacy[Math.floor(index / 2)]; });
+  sheet.styles = [];
+  google.context.reformatAllYearFiles();
   const statusColors = sheet.styles.find(style => style.c === 8 && style.colors);
   assert.deepEqual(Array.from(statusColors.colors, row => row[0]).filter((_, i) => i % 2 === 0), ['#188038', '#C5221F', '#E37400', '#9334E6']);
   const before = JSON.stringify(sheet.rows);

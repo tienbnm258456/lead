@@ -92,6 +92,61 @@ function upgradeUrlColumn(sheet) {
     sheet.hideColumns(19);
   }
 }
+/** Count distinct exported orders across the product tabs in this year's file. */
+function refreshDailySummary(ss, year, cfg) {
+  var orderKeys = new Set();
+  var totals = new Map();
+  var tabPrefix = 'TAB_' + year + '_';
+  var props = cfg.props.getProperties();
+  var tabNames = new Set(Object.keys(props).filter(function(key) {
+    return key.indexOf(tabPrefix) === 0;
+  }).map(function(key) { return props[key]; }));
+
+  ss.getSheets().forEach(function(sheet) {
+    var count = sheet.getLastRow() - 1;
+    if (!tabNames.has(sheet.getName()) || count < 1) return;
+    var keyOffset = sheet.getRange(1, 17, 1, 3).getValues()[0].indexOf(EXPORT_KEY_HEADER);
+    if (keyOffset < 0) return;
+    var keys = sheet.getRange(2, 17 + keyOffset, count, 1).getValues();
+    var dates = sheet.getRange(2, 5, count, 1).getValues();
+    dates.forEach(function(row, index) {
+      var rowKey = String(keys[index][0]);
+      var separator = rowKey.lastIndexOf(':');
+      if (separator < 1) return;
+      var orderKey = rowKey.slice(0, separator);
+      if (orderKeys.has(orderKey)) return;
+
+      var value = row[0];
+      var date = value instanceof Date ? Utilities.formatDate(value, ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy') : String(value);
+      var parts = date.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!parts) return;
+      var day = parts[3] + '-' + parts[2].padStart(2, '0') + '-' + parts[1].padStart(2, '0');
+      orderKeys.add(orderKey);
+      totals.set(day, (totals.get(day) || 0) + 1);
+    });
+  });
+
+  var name = 'Tổng đơn theo ngày';
+  var headers = ['Ngày đặt hàng', 'Tổng đơn hàng'];
+  var summary = ss.getSheetByName(name) || ss.insertSheet(name);
+  var previousCount = summary.getLastRow();
+  if (previousCount && JSON.stringify(summary.getRange(1, 1, 1, 2).getValues()[0]) !== JSON.stringify(headers)) {
+    throw new Error('Summary tab already exists with different headers: ' + name);
+  }
+  var rows = [headers].concat(Array.from(totals.keys()).sort().map(function(day) {
+    return [day.split('-').reverse().join('/'), totals.get(day)];
+  }));
+  summary.getRange(1, 1, rows.length, 1).setNumberFormat('@');
+  summary.getRange(1, 1, rows.length, 2).setValues(rows);
+  if (previousCount > rows.length) {
+    summary.getRange(rows.length + 1, 1, previousCount - rows.length, 2).clearContent();
+  }
+  summary.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#334488').setFontColor('#FFFFFF');
+  summary.setFrozenRows(1);
+  summary.setColumnWidth(1, 150);
+  summary.setColumnWidth(2, 150);
+}
+
 function handleExport(payload, cfg) {
   if (!Number.isInteger(payload.year) || payload.year < 1900 || payload.year > 9999 ||
       !/^(0[1-9]|1[0-2])$/.test(payload.month) || typeof payload.productKey !== 'string' || !payload.productKey ||
@@ -144,6 +199,7 @@ function handleExport(payload, cfg) {
     range.setVerticalAlignment('top').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   }
   formatExportSheet(sheet, last + 1, pending.length);
+  refreshDailySummary(ss, payload.year, cfg);
   SpreadsheetApp.flush();
   return { success: true, protocolVersion: 2, year: payload.year, month: payload.month,
     productKey: payload.productKey, sheetName: sheet.getName(), acceptedRows: payload.data.length,
@@ -168,7 +224,7 @@ function formatExportSheet(sheet, startRow, count) {
     .setVerticalAlignment('middle').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   sheet.setFrozenRows(1);
   sheet.setRowHeight(1, 56);
-  var widths = [180, 155, 180, 125, 170, 170, 180, 160, 360, 110, 150, 150, 170, 320, 170, 420, 420, 300];
+  var widths = [180, 155, 180, 125, 170, 170, 180, 230, 360, 110, 150, 150, 170, 320, 170, 420, 420, 300];
   widths.forEach(function(width, index) { sheet.setColumnWidth(index + 1, width); });
   sheet.hideColumns(19);
   if (!count) return;
@@ -202,6 +258,7 @@ function reformatAllYearFiles() {
         formatExportSheet(sheet, 2, sheet.getLastRow() - 1);
         Logger.log('Formatted: ' + sheet.getName());
       });
+      refreshDailySummary(ss, Number(key.slice(-4)), cfg);
     });
     SpreadsheetApp.flush();
   } finally { lock.releaseLock(); }

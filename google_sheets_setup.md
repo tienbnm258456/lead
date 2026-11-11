@@ -198,7 +198,7 @@ Nếu test xong cần xóa file mẫu, dùng project/thư mục test riêng; kh�
 
 ## Khôi phục format cho file đã xuất
 
-Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong editor và bấm Run một lần. Hàm áp dụng format cho các tab archive đã đăng ký: header xanh/căn giữa/xuống dòng, độ rộng 16 cột, kẻ bảng/nền xen kẽ, trạng thái cột H màu xanh (thành công), đỏ (lỗi), cam (chờ), tím (timeout). Không sửa giá trị, không xuất lại và không thêm dòng. Sau đó Deploy → Manage deployments → Edit → New version → Deploy để các lần xuất tiếp theo tự có format.
+Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong editor và bấm Run một lần. Hàm áp dụng format cho các tab archive đã đăng ký: header xanh/căn giữa/xuống dòng, độ rộng 16 cột, kẻ bảng/nền xen kẽ, trạng thái cột H màu xanh (thành công), đỏ (lỗi), cam (chờ), tím (timeout). Hàm giữ giá trị các dòng đơn đã xuất và tính lại tab **Tổng đơn theo ngày**. Sau đó Deploy → Manage deployments → Edit → New version → Deploy để các lần xuất tiếp theo tự có format.
 
 ## Bổ sung URL Landing Page (04/11/2026)
 
@@ -215,3 +215,5 @@ Sau khi copy code Apps Script mới, chọn hàm reformatAllYearFiles trong edit
 - Landing Page cũ chưa nhập mã vẫn dùng cơ chế cũ để tiếp tục nhận đơn. Mở sửa và điền mã đối tác để chuyển sang mã mới. Đơn đã tạo giữ nguyên mã lịch sử.
 - Excel thủ công và Sheets tự động thêm cột xmlId ở R, chỉ chứa mã gốc từ từng dòng đơn hàng, không kèm khuyến mại/size. URL vẫn ở Q; khóa chống trùng chuyển sang S (ẩn).
 - Cập nhật toàn bộ src/lib/google-apps-script.js rồi Deploy bản mới trước khi chạy job xuất. Script tự nâng cấp tab cũ 16/17 cột và giữ khóa chống trùng; dữ liệu cũ không được tự suy đoán hoặc ghi đè.
+
+Các dòng xuất mới ghi trạng thái đơn hàng CRM vào cột H. Tab **Tổng đơn theo ngày** tổng hợp đơn đã xuất từ các tab sản phẩm trong file của từng năm, mỗi đơn được đếm một lần kể cả khi có nhiều dòng sản phẩm. Sau khi cập nhật và triển khai lại Apps Script, tab tổng hợp sẽ tự cập nhật khi xuất đơn. Có thể chạy reformatAllYearFiles để tạo tab tổng hợp ngay cho các file năm đã có.

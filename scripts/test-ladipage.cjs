@@ -149,11 +149,12 @@ test('requested XML format strips auto suffix, abbreviates descriptive sizes and
 });
 
 test('manual order uses configured offer/promotion/size and splits shipping, ignoring client prices', async () => {
+  let toneConfig;
   let saved; let sent;
   const variant = { ...variants[1], id: 2, xml_id: 'XML0002_OFFER', promotion: '2+2', price: 610000, delivery_fee: 65000 };
   const prisma = {
     landingPage: { findUnique: async ({ where, include }) => where.id === 7 && include.product.include.variants.where.id === 2 ?
-      { product: { ...product, xml_id: '3B5ggmZQg35w2QgJWnoZ21', active: true, slug: 'test', variants: [variant] } } : null },
+      { landing_url: 'https://example.test/tone', product: { ...product, tone_xml_ids: toneConfig, xml_id: '3B5ggmZQg35w2QgJWnoZ21', active: true, slug: 'test', variants: [variant] } } : null },
     order: { create: async ({ data }) => { saved = data; return { id: 11, ...data }; }, update: async () => ({}) },
     orderSyncLog: { create: async () => ({}) }, $transaction: async () => [],
   };
@@ -180,4 +181,39 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   sent = undefined;
   const invalid = await route.POST({ json: async () => ({ ...body, variant_id: 123 }) });
   assert.equal(invalid.status, 400); assert.equal(sent, undefined);
+  toneConfig = [
+    { label: 'Ivory White', xmlId: 'IVORY_ID' },
+    { label: 'Natural White', xmlId: 'NATURAL_ID' },
+  ];
+  const noTone = await route.POST({ json: async () => body });
+  assert.equal(noTone.status, 400);
+  assert.equal(sent, undefined);
+  const toneOrder = await route.POST({ json: async () => ({ ...body, selected_tone: 'Natural White', url_page: 'https://example.test/client-override' }) });
+  assert.equal(toneOrder.status, 201);
+  assert.equal(sent.items[0].offer.xmlId, 'NATURAL_ID');
+  assert.match(saved.selected_size, /^Natural White/);
+  assert.equal(saved.url_page, 'https://example.test/tone');
+});
+
+test('tone orders use the configured XML ID exactly and keep the selected package price', () => {
+  const toneProduct = {
+    ...product,
+    tone_xml_ids: helpers.parseLandingTones([
+      { label: 'Ivory White', xmlId: 'IVORY_ID' },
+      { label: 'Natural White', xmlId: 'NATURAL_ID' },
+    ]),
+  };
+  for (const [tone, xmlId] of [['Ivory White', 'IVORY_ID'], [' natural white ', 'NATURAL_ID']]) {
+    const { packages, sizes, tone: selection } = helpers.readLandingSelections({ products: variants[0].label, tone }, toneProduct);
+    const order = helpers.resolveLandingItems(variants, packages, sizes, toneProduct, selection);
+    assert.equal(order.items[0].xmlId, xmlId);
+    assert.equal(order.items[0].initialPrice, variants[0].price);
+    assert.equal(order.items[0].quantity, 1);
+    assert.equal(crm.formatOfferXmlId(order.items[0]), xmlId);
+  }
+  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, 'Unknown'), /tone màu/);
+  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Ivory White', 'Natural White']), /đúng một tone/);
+  assert.throws(() => helpers.resolveLandingItems(variants, undefined, '', toneProduct, 'Ivory White'), /trường products/);
+  assert.equal(helpers.parseLandingUrl(' https://example.test/product '), 'https://example.test/product');
+  assert.throws(() => helpers.parseLandingUrl('javascript:alert(1)'), helpers.SelectionError);
 });

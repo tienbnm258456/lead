@@ -1,5 +1,5 @@
 import { dataScope, landingScope } from '@/lib/permissions';
-import { ensureOfferXmlIds, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
+import { ensureOfferXmlIds, landingTones, resolveLandingItems, scalar, SelectionError } from '@/lib/ladipage-order';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
@@ -104,16 +104,19 @@ export async function GET(request: NextRequest) {
     // Parse delivery_fee từ items_json để tách giá SP và phí ship
     const ordersWithFee = data.map(order => {
       let deliveryFee = 0;
+      let xmlIdLabel: string | null = null;
       try {
         const items = JSON.parse(order.items_json);
         if (Array.isArray(items) && items.length > 0) {
-          deliveryFee = Number(items[0].deliveryFee) || 0;
+          deliveryFee = Number(items[0]?.deliveryFee) || 0;
+          if (typeof items[0]?.tone === 'string') xmlIdLabel = items[0].tone.trim() || null;
         }
       } catch { /* ignore */ }
       const totalPrice = Number(order.total_price);
       return {
         ...order,
         product_price: String(totalPrice - deliveryFee),
+        xml_id_label: xmlIdLabel,
         delivery_fee: String(deliveryFee),
       };
     });
@@ -160,16 +163,6 @@ export async function POST(request: Request) {
     const customer_name = scalar(body.customer_name);
     const customer_phone = scalar(body.customer_phone);
     const delivery_address = scalar(body.delivery_address);
-    const url_page = scalar(body.url_page);
-    if (url_page) {
-      try {
-        const url = new URL(url_page);
-        if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
-      } catch {
-        return NextResponse.json({ error: 'URL sản phẩm không hợp lệ. Vui lòng nhập URL http:// hoặc https://' }, { status: 400 });
-      }
-    }
-
     if (!customer_name || !customer_phone || !delivery_address) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
@@ -186,11 +179,11 @@ export async function POST(request: Request) {
     if (!page || !page.product.active || page.product.variants.length !== 1) {
       return NextResponse.json({ error: 'Gói sản phẩm không thuộc sản phẩm hoặc đã ngừng hoạt động' }, { status: 400 });
     }
-    const configured = page.product.xml_id ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants);
+    const configured = page.product.xml_id || landingTones(page.product.tone_xml_ids).length ? page.product.variants : await ensureOfferXmlIds(prisma, page.product.variants);
     const resolved = resolveLandingItems(configured.map(v => ({ ...v, price: Number(v.price), delivery_fee: Number(v.delivery_fee) })),
-      configured[0].label, body.selected_size, page.product);
+      configured[0].label, body.selected_size, page.product, body.selected_tone);
     const selected_package = configured[0].label;
-    const selected_size = resolved.items[0].size || null;
+    const selected_size = resolved.selectedOption;
     const landing_slug = page.product.slug;
 
     // M6 Fix: Dùng TEMP ID trước, update sau khi có DB auto-increment ID (chống race condition)
@@ -202,7 +195,7 @@ export async function POST(request: Request) {
         customer_name,
         customer_phone,
         delivery_address,
-        url_page: url_page || null,
+        url_page: page.landing_url || null,
         items_json: JSON.stringify(resolved.items),
         total_price: resolved.totalPrice,
         source: 'admin',
