@@ -146,7 +146,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const phone = body.phone || body.Telefon || body.telefon || body['Telefon raqami'] || body.telefon_raqami || body.sdt || '';
     const address = body.address || body.Manzil || body.manzil || body.dia_chi || body['Địa chỉ'] || '';
     const packageOption = body.products || body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo || '';
-    const sizeOption = body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc || '';
+    const sizeOption = body.option || body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc || '';
 
     // ── Validate required fields ─────────────────────────────────────
     const errors: string[] = [];

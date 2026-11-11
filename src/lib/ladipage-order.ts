@@ -87,10 +87,12 @@ export function parseLandingUrl(value: unknown): string | null {
 export function readLandingSelections(body: Record<string, unknown>, product: LandingProduct) {
   const packageValue = body.package || body.goi || body.variant || body.to_plam || body["to'plam"] || body.combo;
   const usesTones = landingTones(product.tone_xml_ids).length > 0;
+  const legacySize = body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc;
+  const namedOption = body.option || body.tone;
   return {
     packages: selections(body.products || packageValue),
-    sizes: selections(body.size || body.o_lcham || body["o'lcham"] || body.olcham || body.kich_thuoc),
-    tone: usesTones ? body.tone : undefined,
+    sizes: selections(usesTones ? (namedOption && !body.option ? legacySize : undefined) : body.option || legacySize || body.tone),
+    tone: usesTones ? namedOption || legacySize : undefined,
   };
 }
 

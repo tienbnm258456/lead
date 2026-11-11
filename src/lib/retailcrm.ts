@@ -76,7 +76,8 @@ export interface RetailCrmSyncResult {
  * Build the order JSON payload matching RetailCRM v5 format
  */
 export function formatOfferXmlId(item: RetailCrmOrderItem): string {
-  if (item.tone) return item.xmlId;
+  const tone = item.tone?.trim();
+  if (tone) return [item.xmlId, item.promotion?.trim(), tone].filter(Boolean).join(', ');
   const base = item.xmlId.replace(/^(XML\d+)_OFFER$/, '$1');
   const size = item.size?.split(/\s+\+\s+/).map(value => {
     const label = value.trim();

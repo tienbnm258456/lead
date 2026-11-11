@@ -76,7 +76,7 @@ async function fetchLandingPages(search: string): Promise<LandingPagesResponse> 
 
 const formatUZS = (val: number) => new Intl.NumberFormat('uz-UZ').format(val) + ' UZS';
 
-const emptyTones = (): LandingTone[] => [{ label: '', xmlId: '' }, { label: '', xmlId: '' }];
+const emptyOption = (): LandingTone => ({ label: '', xmlId: '' });
 
 const emptyVariant = (): FormVariant => ({ label: '', quantity: 1, price: '', delivery_fee: '0', promotion: '' });
 
@@ -99,14 +99,12 @@ export default function LandingPagesPage() {
   const [editItem, setEditItem] = useState<LandingPage | null>(null);
   const [formName, setFormName] = useState('');
   const [formXmlId, setFormXmlId] = useState('');
-  const [formUseTones, setFormUseTones] = useState(false);
-  const [formTones, setFormTones] = useState<LandingTone[]>(emptyTones);
+  const [formUseOptionXmlIds, setFormUseOptionXmlIds] = useState(false);
+  const [formOptions, setFormOptions] = useState<LandingTone[]>(() => [emptyOption()]);
   const [formLandingUrl, setFormLandingUrl] = useState('');
   const [formVariants, setFormVariants] = useState<FormVariant[]>([emptyVariant()]);
   const [formHasSizes, setFormHasSizes] = useState(false);
-  const [formOptionLabel, setFormOptionLabel] = useState('Size');
-  const [formSizes, setFormSizes] = useState<string[]>([]);
-  const [newSizeInput, setNewSizeInput] = useState('');
+  const [formOptionLabel, setFormOptionLabel] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -179,16 +177,16 @@ export default function LandingPagesPage() {
 
   // ── Form helpers ──────────────────────────────────────────
   const closeForm = () => {
-    setShowForm(false); setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseTones(false); setFormTones(emptyTones()); setFormLandingUrl('');
+    setShowForm(false); setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseOptionXmlIds(false); setFormOptions([emptyOption()]); setFormLandingUrl('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
-    setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
+    setFormOptionLabel('');
   };
 
   const openCreateForm = () => {
     setFormGroup('');
-    setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseTones(false); setFormTones(emptyTones()); setFormLandingUrl('');
+    setEditItem(null); setFormName(''); setFormXmlId(''); setFormUseOptionXmlIds(false); setFormOptions([emptyOption()]); setFormLandingUrl('');
     setFormVariants([emptyVariant()]); setFormHasSizes(false);
-    setFormOptionLabel('Size'); setFormSizes([]); setNewSizeInput('');
+    setFormOptionLabel('');
     setShowForm(true);
   };
 
@@ -198,8 +196,7 @@ export default function LandingPagesPage() {
     setFormName(page.name);
     setFormXmlId(page.product.xml_id || '');
     const tones = landingTones(page.product.tone_xml_ids);
-    setFormUseTones(tones.length > 0);
-    setFormTones(tones.length ? tones : emptyTones());
+    setFormUseOptionXmlIds(tones.length > 0);
     setFormLandingUrl(page.landing_url || '');
     setFormVariants(
       page.product.variants.map(v => ({
@@ -211,11 +208,14 @@ export default function LandingPagesPage() {
         promotion: v.promotion || '',
       })),
     );
-    setFormHasSizes(page.product.has_sizes);
+    setFormHasSizes(page.product.has_sizes || tones.length > 0);
     const sizesData = page.product.sizes;
-    setFormOptionLabel(sizesData?.label || 'Size');
-    setFormSizes(Array.isArray(sizesData?.options) ? sizesData.options : []);
-    setNewSizeInput('');
+    const savedOptions = Array.isArray(sizesData?.options) ? sizesData.options : [];
+    const hasMatchingOptions = tones.every(tone => savedOptions.includes(tone.label));
+    setFormOptionLabel(tones.length && !hasMatchingOptions ? 'Tone' : sizesData?.label || 'Size');
+    setFormOptions(tones.length ? tones : savedOptions.length
+      ? savedOptions.map(label => ({ label, xmlId: '' }))
+      : [emptyOption()]);
     setShowForm(true);
   };
 
@@ -224,16 +224,6 @@ export default function LandingPagesPage() {
   };
 
   const removeVariant = (idx: number) => setFormVariants(prev => prev.filter((_, i) => i !== idx));
-
-  const addSize = () => {
-    const s = newSizeInput.trim();
-    if (s && !formSizes.includes(s)) {
-      setFormSizes(prev => [...prev, s]);
-      setNewSizeInput('');
-    }
-  };
-
-  const removeSize = (idx: number) => setFormSizes(prev => prev.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
     const invalidPromotion = formVariants.findIndex(v => !v.promotion.trim() || v.promotion.trim().length > 100);
@@ -250,14 +240,14 @@ export default function LandingPagesPage() {
 
     const payload = {
       name: formName,
-      xml_id: formUseTones ? null : formXmlId.trim(),
-      tone_xml_ids: formUseTones ? formTones : [],
+      xml_id: formUseOptionXmlIds ? null : formXmlId.trim(),
+      tone_xml_ids: formUseOptionXmlIds ? formOptions : [],
       landing_url: formLandingUrl.trim(),
       ...(currentRole === 'ADMIN' ? { group_id: formGroup ? Number(formGroup) : null } : {}),
       variants,
       has_sizes: formHasSizes,
-      option_label: formHasSizes ? formOptionLabel : undefined,
-      sizes: formHasSizes ? formSizes : [],
+      option_label: formHasSizes ? formOptionLabel.trim() : undefined,
+      sizes: formHasSizes ? formOptions.map(option => option.label.trim()) : [],
     };
 
     if (editItem) {
@@ -268,15 +258,15 @@ export default function LandingPagesPage() {
   };
 
   let validXmlIds = isLandingXmlId(formXmlId);
-  if (formUseTones) {
+  if (formUseOptionXmlIds) {
     try {
-      validXmlIds = parseLandingTones(formTones).length > 0;
+      validXmlIds = parseLandingTones(formOptions).length > 0;
     } catch {
       validXmlIds = false;
     }
   }
   const isFormValid = formName.trim() && validXmlIds && formVariants.length > 0 && formVariants.every(v => v.promotion.trim() && v.promotion.trim().length <= 100 && v.label.trim() && v.price.trim() && Number.isFinite(parseUZS(v.price)) && parseUZS(v.price) >= 0 && Number.isFinite(parseUZS(v.delivery_fee)) && parseUZS(v.delivery_fee) >= 0)
-    && (!formHasSizes || formSizes.length > 0);
+    && (!formHasSizes || (formOptionLabel.trim() && formOptions.every(option => option.label.trim()) && new Set(formOptions.map(option => option.label.trim().toLowerCase())).size === formOptions.length));
 
   const handleSearch = useCallback(() => setSearch(searchInput), [searchInput]);
 
@@ -542,50 +532,6 @@ export default function LandingPagesPage() {
 
             {/* ── Content (scrollable) ── */}
             <div className="flex-1 overflow-y-auto px-7 space-y-6">
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input type="checkbox" checked={formUseTones} onChange={e => setFormUseTones(e.target.checked)} />
-                  Sản phẩm có nhiều XML ID
-                </label>
-                {formUseTones ? (
-                  <>
-                    {formTones.map((tone, index) => (
-                      <div key={index} className="grid gap-2 sm:grid-cols-2">
-                        <label className="grid gap-1 text-sm">
-                          Tên XML ID {index + 1}
-                          <input maxLength={100} placeholder="Ví dụ: Ivory White" value={tone.label}
-                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2"
-                            onChange={e => setFormTones(previous => previous.map((value, i) => i === index ? { ...value, label: e.target.value } : value))} />
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          XML ID {index + 1}
-                          <input maxLength={255} value={tone.xmlId}
-                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 font-mono"
-                            onChange={e => setFormTones(previous => previous.map((value, i) => i === index ? { ...value, xmlId: e.target.value } : value))} />
-                        </label>
-                        {formTones.length > 2 && (
-                          <button type="button" className="justify-self-start text-sm text-red-500"
-                            onClick={() => setFormTones(previous => previous.filter((_, i) => i !== index))}>
-                            Xóa dòng {index + 1}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setFormTones(previous => [...previous, { label: '', xmlId: '' }])}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-indigo-500">
-                      <Plus className="h-4 w-4" /> Thêm XML ID
-                    </button>
-                    <p className="text-xs text-[var(--muted-foreground)]">Trên LadiPage, gửi tên gói mua qua products và tên XML ID đã chọn qua tone.</p>
-                  </>
-                ) : (
-                  <label className="grid gap-1.5 text-sm font-semibold">
-                    XML ID do đối tác cấp
-                    <input maxLength={255} className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono"
-                      placeholder="Nhập XML ID gốc" value={formXmlId} onChange={e => setFormXmlId(e.target.value)} />
-                    <span className="text-xs font-normal text-[var(--muted-foreground)]">Hệ thống ghép khuyến mại và size khi gửi CRM.</span>
-                  </label>
-                )}
-              </div>
               <label className="grid gap-1.5 text-sm font-semibold">
                 URL landing page
                 <input type="url" maxLength={2048} value={formLandingUrl} onChange={e => setFormLandingUrl(e.target.value)}
@@ -676,46 +622,67 @@ export default function LandingPagesPage() {
                       Bật nếu LadiPage có thêm trường chọn (VD: size, kg, màu sắc...)
                     </p>
                   </div>
-                  <button type="button" onClick={() => setFormHasSizes(!formHasSizes)}
+                  <button type="button" role="switch" aria-label="Có tùy chọn phụ" aria-checked={formHasSizes} disabled={formUseOptionXmlIds} onClick={() => setFormHasSizes(!formHasSizes)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formHasSizes ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${formHasSizes ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
+                <div className="mt-4 space-y-3 border-t border-[var(--border)] pt-4">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
+                    <input type="checkbox" checked={formUseOptionXmlIds} onChange={e => {
+                      const checked = e.target.checked;
+                      setFormUseOptionXmlIds(checked);
+                      if (checked) {
+                        setFormHasSizes(true);
+                        setFormOptions(previous => previous.length < 2 ? [...previous, emptyOption()] : previous);
+                      }
+                    }} />
+                    Sản phẩm có nhiều XML ID
+                  </label>
+                  {!formUseOptionXmlIds && (
+                    <label className="grid gap-1.5 text-sm font-semibold">
+                      XML ID dùng chung
+                      <input maxLength={255} className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3 font-mono"
+                        placeholder="Nhập XML ID gốc" value={formXmlId} onChange={e => setFormXmlId(e.target.value)} />
+                    </label>
+                  )}
+                </div>
                 {formHasSizes && (
-                  <div className="mt-4 space-y-3 animate-fade-in">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Tên tùy chọn</label>
-                      <input className="w-full rounded-lg border px-4 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                        placeholder="VD: Size, Trọng lượng, Màu sắc..." value={formOptionLabel} onChange={e => setFormOptionLabel(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>Các giá trị</label>
-                      <div className="flex items-center gap-2">
-                        <input className="flex-1 rounded-lg border px-4 py-2.5 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                          style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                          placeholder={formOptionLabel === 'Size' ? "VD: S o'lcham: 55 kg dan kam" : `VD: ${formOptionLabel} 1`}
-                          value={newSizeInput} onChange={e => setNewSizeInput(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSize())} />
-                        <button onClick={addSize} disabled={!newSizeInput.trim()}
-                          className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500 text-white disabled:opacity-40 transition-colors hover:bg-indigo-600">
-                          <Plus className="h-5 w-5" />
-                        </button>
+                  <div className="mt-4 space-y-3">
+                    <label className="grid gap-1.5 text-sm font-semibold">
+                      Tên tùy chọn
+                      <input maxLength={100} className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-2.5"
+                        placeholder="Ví dụ: Tone, Size, Trọng lượng" value={formOptionLabel} onChange={e => setFormOptionLabel(e.target.value)} />
+                    </label>
+                    {formOptions.map((option, index) => (
+                      <div key={index} className="flex flex-wrap items-end gap-2">
+                        <label className="grid min-w-36 flex-1 gap-1 text-sm">
+                          Giá trị {index + 1}
+                          <input maxLength={100} value={option.label} placeholder="Ví dụ: Natural White"
+                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2"
+                            onChange={e => setFormOptions(previous => previous.map((row, i) => i === index ? { ...row, label: e.target.value } : row))} />
+                        </label>
+                        {formUseOptionXmlIds && (
+                          <label className="grid min-w-36 flex-1 gap-1 text-sm">
+                            XML ID
+                            <input maxLength={255} value={option.xmlId}
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-3 py-2 font-mono"
+                              onChange={e => setFormOptions(previous => previous.map((row, i) => i === index ? { ...row, xmlId: e.target.value } : row))} />
+                          </label>
+                        )}
+                        {formOptions.length > (formUseOptionXmlIds ? 2 : 1) && (
+                          <button type="button" className="p-2 text-red-500" aria-label={'Xóa giá trị ' + (index + 1)}
+                            onClick={() => setFormOptions(previous => previous.filter((_, i) => i !== index))}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
-                    </div>
-                    {formSizes.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {formSizes.map((s, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium"
-                            style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
-                            {s}
-                            <button onClick={() => removeSize(i)} className="ml-0.5 text-red-400 hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-center py-2" style={{ color: 'var(--muted-foreground)' }}>Thêm ít nhất 1 giá trị cho {formOptionLabel}</p>
-                    )}
+                    ))}
+                    <button type="button" onClick={() => setFormOptions(previous => [...previous, emptyOption()])}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-indigo-500">
+                      <Plus className="h-4 w-4" /> Thêm giá trị
+                    </button>
+                    <p className="text-xs text-[var(--muted-foreground)]">Trên LadiPage, gửi giá trị đã chọn qua option và gói mua qua products.</p>
                   </div>
                 )}
               </div>

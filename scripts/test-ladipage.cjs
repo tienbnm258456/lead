@@ -188,14 +188,14 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   const noTone = await route.POST({ json: async () => body });
   assert.equal(noTone.status, 400);
   assert.equal(sent, undefined);
-  const toneOrder = await route.POST({ json: async () => ({ ...body, selected_tone: 'Natural White', url_page: 'https://example.test/client-override' }) });
+  const toneOrder = await route.POST({ json: async () => ({ ...body, selected_option: 'Natural White', url_page: 'https://example.test/client-override' }) });
   assert.equal(toneOrder.status, 201);
-  assert.equal(sent.items[0].offer.xmlId, 'NATURAL_ID');
+  assert.equal(sent.items[0].offer.xmlId, 'NATURAL_ID, 2+2, Natural White');
   assert.match(saved.selected_size, /^Natural White/);
   assert.equal(saved.url_page, 'https://example.test/tone');
 });
 
-test('tone orders use the configured XML ID exactly and keep the selected package price', () => {
+test('tone orders append the promotion and configured name to the selected XML ID', () => {
   const toneProduct = {
     ...product,
     tone_xml_ids: helpers.parseLandingTones([
@@ -205,12 +205,16 @@ test('tone orders use the configured XML ID exactly and keep the selected packag
   };
   for (const [tone, xmlId] of [['Ivory White', 'IVORY_ID'], [' natural white ', 'NATURAL_ID']]) {
     const { packages, sizes, tone: selection } = helpers.readLandingSelections({ products: variants[0].label, tone }, toneProduct);
-    const order = helpers.resolveLandingItems(variants, packages, sizes, toneProduct, selection);
+    const order = helpers.resolveLandingItems([{ ...variants[0], promotion: '1+1' }], packages, sizes, toneProduct, selection);
+    const generic = helpers.readLandingSelections({ products: variants[0].label, option: tone }, toneProduct);
+    assert.deepEqual(generic, { packages, sizes, tone: selection });
     assert.equal(order.items[0].xmlId, xmlId);
     assert.equal(order.items[0].initialPrice, variants[0].price);
     assert.equal(order.items[0].quantity, 1);
-    assert.equal(crm.formatOfferXmlId(order.items[0]), xmlId);
+    assert.equal(crm.formatOfferXmlId(order.items[0]), [xmlId, '1+1', tone.trim() === 'Ivory White' ? 'Ivory White' : 'Natural White'].join(', '));
   }
+  assert.deepEqual(helpers.readLandingSelections({ products: variants[0].label, option: '500g' }, product).sizes, ['500g']);
+  assert.equal(helpers.readLandingSelections({ products: variants[0].label, size: 'Ivory White' }, toneProduct).tone, 'Ivory White');
   assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, 'Unknown'), /tone màu/);
   assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Ivory White', 'Natural White']), /đúng một tone/);
   assert.throws(() => helpers.resolveLandingItems(variants, undefined, '', toneProduct, 'Ivory White'), /trường products/);

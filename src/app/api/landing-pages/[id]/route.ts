@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { isLandingXmlId, parseLandingTones, parseLandingUrl, SelectionError } from '@/lib/ladipage-order';
+import { isLandingXmlId, parseLandingTones, parseLandingUrl, scalar, SelectionError } from '@/lib/ladipage-order';
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -39,6 +39,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const body = await request.json();
     const tones = parseLandingTones(body.tone_xml_ids);
+    const optionLabel = scalar(body.option_label);
+    if (tones.length && body.has_sizes !== undefined && (!body.has_sizes || !optionLabel)) {
+      throw new SelectionError('Bật tùy chọn và nhập tên tùy chọn khi cấu hình XML ID riêng.');
+    }
     const landingUrl = body.landing_url === undefined ? undefined : parseLandingUrl(body.landing_url);
     if (!tones.length && (body.xml_id !== undefined || body.tone_xml_ids !== undefined) && !isLandingXmlId(body.xml_id)) {
       throw new SelectionError('Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng.');
@@ -91,11 +95,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         updateLP.name = body.name.trim();
         updateProduct.name = body.name.trim();
       }
-      if (body.has_sizes !== undefined) {
+      if (tones.length) {
+        updateProduct.has_sizes = true;
+        updateProduct.sizes = { label: optionLabel || 'Tone', options: tones.map(tone => tone.label) };
+      } else if (body.has_sizes !== undefined) {
         updateProduct.has_sizes = !!body.has_sizes;
         updateProduct.sizes = body.has_sizes
-          ? { label: body.option_label || 'Size', options: body.sizes || [] }
-          : null;
+          ? { label: optionLabel || 'Size', options: body.sizes || [] }
+          : Prisma.DbNull;
       }
       if (body.active !== undefined) updateLP.active = body.active;
 

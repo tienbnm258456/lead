@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { isLandingXmlId, parseLandingTones, parseLandingUrl, SelectionError } from '@/lib/ladipage-order';
+import { isLandingXmlId, parseLandingTones, parseLandingUrl, scalar, SelectionError } from '@/lib/ladipage-order';
 import { landingScope, isTotalAdmin, managedGroupWhere } from '@/lib/permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -101,6 +101,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const tones = parseLandingTones(body.tone_xml_ids);
+    const optionLabel = scalar(body.option_label);
+    if (tones.length && body.has_sizes !== undefined && (!body.has_sizes || !optionLabel)) {
+      throw new SelectionError('Bật tùy chọn và nhập tên tùy chọn khi cấu hình XML ID riêng.');
+    }
     const landingUrl = body.landing_url === undefined ? undefined : parseLandingUrl(body.landing_url);
     if (!tones.length && !isLandingXmlId(body.xml_id)) {
       throw new SelectionError('Vui lòng nhập XML ID gốc do đối tác cấp, tối đa 255 ký tự, không chứa dấu phẩy hoặc xuống dòng.');
@@ -156,9 +160,10 @@ export async function POST(request: NextRequest) {
           tone_xml_ids: tones.length ? tones : Prisma.DbNull,
           group_id: groupId,
           slug,
-          has_sizes: !!body.has_sizes,
+          has_sizes: Boolean(tones.length || body.has_sizes),
           // sizes stored as { label: "Size", options: ["S", "M", "L"] }
-          sizes: body.has_sizes ? { label: body.option_label || 'Size', options: body.sizes || [] } : undefined,
+          sizes: tones.length ? { label: optionLabel || 'Tone', options: tones.map(tone => tone.label) }
+            : body.has_sizes ? { label: optionLabel || 'Size', options: body.sizes || [] } : undefined,
           active: true,
         },
       });

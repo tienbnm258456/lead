@@ -168,7 +168,6 @@ export default function OrdersPage() {
   // ── Cascading form state ──
   const [formLandingPages, setFormLandingPages] = useState<FormLandingPage[]>([]);
   const [formLoadingLP, setFormLoadingLP] = useState(false);
-  const [selectedTone, setSelectedTone] = useState('');
   const [selectedLPId, setSelectedLPId] = useState<number | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
 
@@ -178,7 +177,10 @@ export default function OrdersPage() {
   const variants = selectedProduct?.variants || [];
   const selectedVariant = variants.find(v => v.id === selectedVariantId);
   const tones = landingTones(selectedProduct?.tone_xml_ids);
-  const hasSizes = selectedProduct?.has_sizes && selectedProduct?.sizes?.options?.length;
+  const savedOptions = selectedProduct?.sizes?.options ?? [];
+  const optionValues = tones.length ? tones.map(tone => tone.label) : selectedProduct?.has_sizes ? savedOptions : [];
+  const optionLabel = tones.length && !tones.every(tone => savedOptions.includes(tone.label))
+    ? 'Tone' : selectedProduct?.sizes?.label || 'Tùy chọn';
 
   const { data, isPending: isLoading, isFetching } = useQuery({
     queryKey: ['orders', viewerScope, filters],
@@ -262,7 +264,6 @@ export default function OrdersPage() {
     setShowForm(false);
     setEditOrder(null);
     setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
-    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
   };
@@ -270,7 +271,6 @@ export default function OrdersPage() {
   const openCreateForm = async () => {
     setEditOrder(null);
     setFormData({ customer_name: '', customer_phone: '', delivery_address: '', total_price: '', selected_package: '', selected_size: '', landing_slug: '' });
-    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -290,7 +290,6 @@ export default function OrdersPage() {
     if (!canEditOrders) return;
     setEditOrder(o);
     setFormData({ customer_name: o.customer_name, customer_phone: o.customer_phone, delivery_address: o.delivery_address, total_price: String(parseFloat(o.total_price)), selected_package: o.selected_package || '', selected_size: o.selected_size || '', landing_slug: o.landing_slug || '' });
-    setSelectedTone('');
     setSelectedLPId(null);
     setSelectedVariantId(null);
     setShowForm(true);
@@ -298,7 +297,6 @@ export default function OrdersPage() {
 
   // Handle landing page selection → reset variant + size
   const handleSelectLP = (lpId: number | null) => {
-    setSelectedTone('');
     setSelectedLPId(lpId);
     setSelectedVariantId(null);
     if (lpId) {
@@ -332,7 +330,7 @@ export default function OrdersPage() {
     if (editOrder) {
       updateMutation.mutate({ id: editOrder.id, payload: formData });
     } else {
-      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId, selected_tone: selectedTone });
+      createMutation.mutate({ ...formData, landing_page_id: selectedLPId, variant_id: selectedVariantId, selected_option: formData.selected_size });
     }
   };
 
@@ -379,7 +377,7 @@ export default function OrdersPage() {
     bulkDeleteMutation.mutate(Array.from(selectedIds));
   };
 
-  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!hasSizes || formData.selected_size) && (!tones.length || selectedTone)));
+  const isFormValid = formData.customer_name.trim() && formData.customer_phone.trim() && formData.delivery_address.trim() && (editOrder || (selectedLPId && selectedVariantId && (!optionValues.length || formData.selected_size)));
 
   const handleSort = useCallback((col: string) => {
     setFilters(p => ({
@@ -1042,35 +1040,16 @@ export default function OrdersPage() {
                     </div>
                   )}
 
-                  {tones.length > 0 && (
+                  {selectedVariantId && optionValues.length > 0 && (
                     <label className="grid gap-1.5 text-sm font-semibold">
-                      Tên XML ID
-                      <select required value={selectedTone} onChange={e => setSelectedTone(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3">
-                        <option value="">— Chọn tên XML ID —</option>
-                        {tones.map(tone => <option key={tone.label} value={tone.label}>{tone.label}</option>)}
+                      <span>{optionLabel} <span className="text-red-500">*</span></span>
+                      <select required className="w-full rounded-lg border border-[var(--border)] bg-[var(--muted)] px-4 py-3"
+                        value={formData.selected_size}
+                        onChange={e => setFormData(p => ({ ...p, selected_size: e.target.value }))}>
+                        <option value="">— Chọn {optionLabel.toLowerCase()} —</option>
+                        {optionValues.map(value => <option key={value} value={value}>{value}</option>)}
                       </select>
                     </label>
-                  )}
-
-                  {/* Size / option select (visible if product has sizes AND variant selected) */}
-                  {selectedVariantId && hasSizes && selectedProduct?.sizes && (
-                    <div>
-                      <label className="mb-1.5 block text-sm font-semibold" style={{ color: 'var(--muted-foreground)' }}>
-                        {selectedProduct.sizes.label || 'Tùy chọn'} <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        className="w-full rounded-lg border px-4 py-3 text-base outline-none focus:ring-2 focus:ring-indigo-500/30"
-                        style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
-                        value={formData.selected_size}
-                        onChange={e => setFormData(p => ({ ...p, selected_size: e.target.value }))}
-                      >
-                        <option value="">— Chọn {selectedProduct.sizes.label?.toLowerCase() || 'tùy chọn'} —</option>
-                        {selectedProduct.sizes.options.map((opt: string) => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    </div>
                   )}
 
                   {/* Auto-calculated price display */}
