@@ -14,6 +14,7 @@ import { CRM_STATUS_GROUPS, type CrmStatusGroup } from '@/lib/crm-status-display
 import { queryScope } from '@/lib/query-scope';
 import { OrderDetailsDialog, type OrderDetailData } from '@/components/order-details-dialog';
 import { OrderAmountCards } from '@/components/order-amount-cards';
+import { ViewportTableScroll } from '@/components/viewport-table-scroll';
 import type { OrderAmounts } from '@/lib/order-amounts';
 
 interface Order extends OrderDetailData {
@@ -679,7 +680,7 @@ export default function OrdersPage() {
 
       {/* Data table */}
       <div className="card-elevated overflow-hidden !rounded-xl">
-        <div className="overflow-x-auto">
+        <ViewportTableScroll>
           <table className="w-full">
             <thead>
               <tr style={{ background: 'var(--muted)' }}>
@@ -886,7 +887,7 @@ export default function OrdersPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </ViewportTableScroll>
 
         {/* Pagination */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: 'var(--border)' }}>
