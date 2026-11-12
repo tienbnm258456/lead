@@ -200,7 +200,7 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   const toneOrder = await route.POST({ json: async () => ({ ...body, selected_option: 'Natural White', url_page: 'https://example.test/client-override' }) });
   assert.equal(toneOrder.status, 201);
   assert.deepEqual(sent.items[0].offer, { xmlId: 'NATURAL_ID', name: 'Kakashow Natural White' });
-  assert.deepEqual(sent.customFields, { blok_doprodazh: variant.label });
+  assert.deepEqual(sent.customFields, { blok_doprodazh: variant.label + ' | Natural White' });
   assert.match(saved.selected_size, /^Natural White/);
   assert.equal(saved.url_page, 'https://example.test/client-override');
 });
@@ -225,8 +225,13 @@ test('tone orders store the raw XML ID and configured offer name', () => {
   }
   assert.deepEqual(helpers.readLandingSelections({ products: variants[0].label, option: '500g' }, product).sizes, ['500g']);
   assert.equal(helpers.readLandingSelections({ products: variants[0].label, size: 'Ivory White' }, toneProduct).tone, 'Ivory White');
-  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, 'Unknown'), /tone màu/);
-  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Ivory White', 'Natural White']), /đúng một tone/);
+  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, 'Unknown'), /tùy chọn/);
+  const multi = helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Natural White', 'Ivory White']);
+  const sent = crm.buildOrderPayload({ delivery: { address: { text: 'Test' } }, items: multi.items });
+  assert.equal(sent.items.length, 1);
+  assert.deepEqual(sent.items[0].offer, { xmlId: 'NATURAL_ID', name: 'Kakashow Natural White' });
+  assert.deepEqual(sent.customFields, { blok_doprodazh: variants[0].label + ' | Natural White + Ivory White' });
+  assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Natural White', 'Unknown']), /tùy chọn/);
   assert.throws(() => helpers.resolveLandingItems(variants, undefined, '', toneProduct, 'Ivory White'), /trường products/);
   assert.equal(helpers.parseLandingUrl(' https://example.test/product '), 'https://example.test/product');
   assert.throws(() => helpers.parseLandingUrl('javascript:alert(1)'), helpers.SelectionError);

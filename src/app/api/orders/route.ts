@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { createRetailCrmOrder, RetailCrmOrderPayload } from '@/lib/retailcrm';
 import { OrderSyncStatus } from '@prisma/client';
 import { requireAuth } from '@/lib/require-auth';
-import { orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
+import { orderDateRange, orderLocalDate, orderFilterWhere, orderXmlId, OrderFilterError } from '@/lib/order-filters';
 import { orderIdsForXmlId } from '@/lib/order-xml-filter';
 import { sumOrderAmounts } from '@/lib/order-amounts';
 
@@ -30,8 +30,6 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const landingSlug = searchParams.get('landingSlug') || '';
-    const dateFrom = searchParams.get('dateFrom') || '';
-    const dateTo = searchParams.get('dateTo') || '';
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
@@ -58,16 +56,6 @@ export async function GET(request: NextRequest) {
       where.landing_slug = landingSlug;
     }
 
-    if (dateFrom || dateTo) {
-      where.created_at = {};
-      if (dateFrom) (where.created_at as Record<string, unknown>).gte = new Date(dateFrom);
-      if (dateTo) {
-        const endDate = new Date(dateTo);
-        endDate.setHours(23, 59, 59, 999);
-        (where.created_at as Record<string, unknown>).lte = endDate;
-      }
-    }
-
     // Filter by export status
     const exportStatus = searchParams.get('exportStatus') || '';
     if (exportStatus === 'not_exported') {
@@ -81,7 +69,8 @@ export async function GET(request: NextRequest) {
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
 
     // Fetch orders + total + distinct landing pages (for filter dropdown)
-    const [data, total, landingPages, amountGroups] = await Promise.all([
+    const today = orderLocalDate();
+    const [data, total, landingPages, amountGroups, dailyGroups] = await Promise.all([
       prisma.order.findMany({
         where,
         orderBy: { [safeSortBy]: sortOrder },
@@ -91,7 +80,7 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where }),
       // Get all landing pages with product info for the filter dropdown
       prisma.landingPage.findMany({
-        where: { active: true, ...landingScope(auth.user) },
+        where: landingScope(auth.user),
         include: {
           product: { select: { name: true, slug: true } },
         },
@@ -99,7 +88,19 @@ export async function GET(request: NextRequest) {
       }),
       // All matching orders; pagination applies only to findMany above.
       prisma.order.groupBy({ by: ['crm_status'], where, _sum: { total_price: true } }),
+      prisma.order.groupBy({
+        by: ['landing_slug'],
+        where: { ...dataScope(auth.user), created_at: orderDateRange(today, today) },
+        _count: { _all: true },
+      }),
     ]);
+
+    const productNames = new Map(landingPages.map(page => [page.product.slug, page.product.name]));
+    const dailyProducts = dailyGroups.map(({ landing_slug: slug, _count }) => ({
+      slug,
+      name: slug ? productNames.get(slug) || slug : 'Chưa gắn sản phẩm',
+      count: _count._all,
+    })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'vi'));
 
     // Parse delivery_fee từ items_json để tách giá SP và phí ship
     const ordersWithFee = data.map(order => {
@@ -125,10 +126,11 @@ export async function GET(request: NextRequest) {
       data: ordersWithFee,
       total,
       amounts: sumOrderAmounts(amountGroups),
+      todayOrders: { date: today, total: dailyProducts.reduce((sum, item) => sum + item.count, 0), products: dailyProducts },
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
-      landingPages: landingPages.map(lp => ({
+      landingPages: landingPages.filter(lp => lp.active).map(lp => ({
         slug: lp.product.slug,
         name: lp.name,
         productName: lp.product.name,

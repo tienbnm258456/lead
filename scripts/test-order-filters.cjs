@@ -27,10 +27,17 @@ function setup(user = { id: 1, role: 'ADMIN' }, summary = { rows: [], total: 0, 
   const prisma = {
     order: {
       findMany: async args => { calls.push(['find', args]); return (summary.orders || []).slice(args.skip || 0, (args.skip || 0) + (args.take || 1000)); },
-      groupBy: async args => { calls.push(['amounts', args]); return summary.rows; },
+      groupBy: async args => {
+        if (args.by.includes('landing_slug')) {
+          calls.push(['today', args]);
+          return summary.dailyRows || [];
+        }
+        calls.push(['amounts', args]);
+        return summary.rows;
+      },
       count: async args => { calls.push(['count', args]); return summary.total; },
     },
-    landingPage: { findMany: async () => [] },
+    landingPage: { findMany: async () => summary.landingPages || [] },
   };
   const mocks = {
     'next/server': { NextResponse }, '@/lib/prisma': { prisma },
@@ -145,4 +152,35 @@ test('filter options are restricted to the viewer group and only list ADMIN2 acc
     assert.deepEqual(query.where, user.role === 'ADMIN' ? {} : { id: 12 });
     assert.deepEqual(query.select.users.where, { role: 'ADMIN2' });
   }
+});
+
+test('today counts order rows per product within user scope and Vietnam calendar day', async () => {
+  const state = setup({ id: 3, role: 'USER', group_id: 12 }, {
+    rows: [], orders: [], total: 0,
+    dailyRows: [
+      { landing_slug: 'kem', _count: { _all: 3 } },
+      { landing_slug: 'dai', _count: { _all: 7 } },
+      { landing_slug: null, _count: { _all: 1 } },
+    ],
+    landingPages: [{ active: false, name: 'Đai lưng', product: { slug: 'dai', name: 'Đai lưng' } }],
+  });
+  const result = await state.list.GET(request('landingSlug=kem&pageSize=1&status=FAILED'));
+  assert.equal(result.status, 200);
+  const { date, total, products } = result.body.todayOrders;
+  assert.equal(total, 11);
+  assert.deepEqual(products, [
+    { slug: 'dai', name: 'Đai lưng', count: 7 },
+    { slug: 'kem', name: 'kem', count: 3 },
+    { slug: null, name: 'Chưa gắn sản phẩm', count: 1 },
+  ]);
+  assert.deepEqual(state.calls.find(([type]) => type === 'today')[1].where, {
+    group_id: 12,
+    created_at: filters.orderDateRange(date, date),
+  });
+  assert.deepEqual(filters.orderDateRange('2026-11-12', '2026-11-12'), {
+    gte: new Date('2026-11-11T17:00:00Z'),
+    lt: new Date('2026-11-12T17:00:00Z'),
+  });
+  assert.equal(filters.orderLocalDate(new Date('2026-11-11T16:59:59Z')), '2026-11-11');
+  assert.equal(filters.orderLocalDate(new Date('2026-11-11T17:00:00Z')), '2026-11-12');
 });

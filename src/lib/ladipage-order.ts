@@ -109,13 +109,14 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
   const packages = selections(packageValue);
   const sizes = selections(sizeValue);
   const tones = landingTones(product.tone_xml_ids);
-  let tone: LandingTone | undefined;
-  if (tones.length) {
-    const chosen = selections(toneValue);
-    if (chosen.length !== 1) throw new SelectionError('Vui lòng chọn đúng một tone màu.');
-    tone = tones.find(option => normalize(option.label) === normalize(chosen[0]));
-    if (!tone) throw new SelectionError('Không tìm thấy tone màu đã cấu hình: ' + chosen[0]);
-  }
+  const selectedTones = tones.length ? selections(toneValue).map(value => {
+    const match = tones.find(option => normalize(option.label) === normalize(value));
+    if (!match) throw new SelectionError('Không tìm thấy giá trị tùy chọn đã cấu hình: ' + value);
+    return match;
+  }) : [];
+  const tone = selectedTones.at(0);
+  if (tones.length && !tone) throw new SelectionError('Vui lòng chọn ít nhất một giá trị tùy chọn.');
+  const optionValues = [...new Set([...selectedTones.map(option => option.label), ...sizes])];
   if (tone && !packages.length && variants.length > 1) throw new SelectionError('Thiếu gói mua. Cấu hình LadiPage gửi gói qua trường products.');
   const selected = packages.length ? packages : [''];
   const matches = selected.map(label => {
@@ -137,7 +138,8 @@ export function resolveLandingItems(variants: LandingVariant[], packageValue: un
     variantLabel: variant.label, promotion: variant.promotion || undefined,
     size: sizes.join(' + ') || undefined,
     ...(tone && { tone: tone.label }),
+    ...(optionValues.length && { optionValues }),
     deliveryFee: index === 0 ? deliveryFee : 0,
   }));
-  return { items, deliveryFee, selectedOption: [tone?.label, ...sizes].filter(Boolean).join(' | ') || null, totalPrice: items.reduce((sum, item) => sum + item.initialPrice * item.quantity, deliveryFee) };
+  return { items, deliveryFee, selectedOption: optionValues.join(' | ') || null, totalPrice: items.reduce((sum, item) => sum + item.initialPrice * item.quantity, deliveryFee) };
 }

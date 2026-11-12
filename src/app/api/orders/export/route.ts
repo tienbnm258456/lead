@@ -50,16 +50,6 @@ export async function GET(request: NextRequest) {
     }
     if (status) where.sync_status = status as Prisma.EnumOrderSyncStatusFilter;
     if (landingSlug) where.landing_slug = landingSlug;
-    if (dateFrom || dateTo) {
-      where.created_at = {};
-      if (dateFrom) (where.created_at as Prisma.DateTimeFilter).gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        (where.created_at as Prisma.DateTimeFilter).lte = end;
-      }
-    }
-
     // Filter by export status
     const exportStatus = searchParams.get('exportStatus') || '';
     if (exportStatus === 'not_exported') {

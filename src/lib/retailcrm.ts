@@ -29,6 +29,7 @@ export interface RetailCrmOrderItem {
   promotion?: string;
   size?: string;
   variantLabel?: string;
+  optionValues?: string[];
   quantity: number;
   /** Unit price in full UZS (e.g. 250000); converted to thousands only in buildOrderPayload */
   initialPrice: number;
@@ -81,6 +82,10 @@ export interface RetailCrmSyncResult {
 export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, unknown> {
   const packages = [...new Set(data.items.flatMap(item => typeof item.variantLabel === 'string' && item.variantLabel.trim() ? [item.variantLabel.trim()] : []))];
   const packageName = packages.join(' | ') || data.packageName?.trim();
+  const options = [...new Set(data.items.flatMap(item =>
+    Array.isArray(item.optionValues) ? item.optionValues.filter(value => typeof value === 'string' && value.trim()) : [],
+  ))];
+  const offerNote = [packageName, options.join(' + ')].filter(Boolean).join(' | ');
   return {
     externalId: data.externalId,
     firstName: data.firstName,
@@ -95,7 +100,7 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
         text: data.delivery.address.text,
       },
     },
-    ...(packageName && { customFields: { blok_doprodazh: packageName } }),
+    ...(offerNote && { customFields: { blok_doprodazh: offerNote } }),
     items: data.items.map((item) => ({
       offer: {
         xmlId: item.xmlId,

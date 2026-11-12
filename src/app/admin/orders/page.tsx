@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, Filter, X, ChevronLeft, ChevronRight,
+  Search, Filter, X, ChevronDown, ChevronLeft, ChevronRight,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw,
   ShoppingCart, Plus, Edit2, Trash2, Download, FileSpreadsheet, Eye, ExternalLink,
 } from 'lucide-react';
@@ -73,6 +73,7 @@ interface FormLandingPage {
 
 interface OrdersResponse {
   amounts: OrderAmounts;
+  todayOrders?: { date: string; total: number; products: { slug: string | null; name: string; count: number }[] };
   data: Order[];
   total: number;
   page: number;
@@ -205,6 +206,7 @@ export default function OrdersPage() {
     queryFn: () => fetchOrders(filters),
   });
 
+  const todayOrders = data?.todayOrders;
   const orders = data?.data || [];
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
@@ -477,6 +479,44 @@ export default function OrdersPage() {
 
       <OrderAmountCards amounts={data?.amounts} loading={isFetching}
         caption={`Tổng tiền theo bộ lọc · ${data?.total ?? 0} đơn khớp điều kiện`} />
+
+      {todayOrders && (
+        <details className="group rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden">
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="font-semibold">Đơn hàng hôm nay</span>
+              <strong className="text-lg tabular-nums text-indigo-600 dark:text-indigo-400">{todayOrders.total.toLocaleString('vi-VN')} đơn</strong>
+              <span className="text-[var(--muted-foreground)]">{todayOrders.date.split('-').reverse().join('/')}</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+              Xem theo sản phẩm <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
+            </span>
+          </summary>
+          <div className="border-t border-[var(--border)] px-4 py-2 text-sm">
+            {todayOrders.products.length ? (
+              <ul className="max-h-64 divide-y divide-[var(--border)] overflow-y-auto">
+                {todayOrders.products.map(({ slug, name, count }) => (
+                  <li key={slug ?? ''} className="flex items-center justify-between gap-4 py-2">
+                    {slug ? (
+                      <button type="button" className="text-left font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                        onClick={() => {
+                          const date = todayOrders.date;
+                          clearFilters();
+                          setSearchInput('');
+                          setSelectedIds(new Set());
+                          setFilters(previous => ({ ...previous, search: '', landingSlug: slug, dateFrom: date, dateTo: date }));
+                        }}>
+                        {name}
+                      </button>
+                    ) : <span>{name}</span>}
+                    <strong className="shrink-0 tabular-nums">{count.toLocaleString('vi-VN')} đơn</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="py-2 text-[var(--muted-foreground)]">Hôm nay chưa có đơn hàng.</p>}
+          </div>
+        </details>
+      )}
 
       {/* Search + Filter bar */}
       <div className="rounded-xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
