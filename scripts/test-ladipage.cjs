@@ -27,8 +27,8 @@ test('multiple packages use every item and charge max shipping once; CRM divides
   assert.equal(resolved.totalPrice, 878000);
   const input = { externalId: 'GF-10001', firstName: 'Ali', phone: '123', delivery: { cost: resolved.deliveryFee, address: { text: 'Bukhara' } }, items: resolved.items };
   const output = crm.buildOrderPayload(input);
-  assert.deepEqual(output.items.map(i => [i.offer.xmlId, i.quantity, i.initialPrice]), [['OFFER_A_S', 1, 299], ['OFFER_B_S', 1, 529]]);
-  assert.equal(output.delivery.cost, 50);
+  assert.deepEqual(output.items.map(i => [i.offer.xmlId, i.quantity, i.initialPrice]), [['OFFER_A_S', 1, 299], ['OFFER_B_S', 1, 529], ['g79J3w8NjidTy4BRFdaJC0', 1, 50]]);
+  assert.equal('cost' in output.delivery, false);
   assert.equal(input.items[0].initialPrice, 299000);
   assert.deepEqual(crm.buildOrderPayload(input), output);
 });
@@ -72,7 +72,7 @@ test('webhook sends multiple sizes and holds only an unknown package', async () 
     assert.equal(saved.url_page, "https://example.test/vc-cream.store");
     assert.deepEqual(JSON.parse(saved.items_json)[0].rawPayload, { ...body, url_page: "https://example.test/vc-cream.store" });
     if (ambiguous) { assert.equal(sent, undefined); assert.equal(saved.sync_status, 'FAILED'); assert.equal(response.body.requiresReview, true); }
-    else { assert.deepEqual(sent.items.map(i => i.offer.xmlId), ['3B5ggmZQg35w2QgJWnoZ21', '3B5ggmZQg35w2QgJWnoZ21']); assert.equal(JSON.parse(saved.items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21'); assert.equal(sent.items.length, 2); assert.equal(sent.items[0].initialPrice, 299); assert.equal(sent.delivery.cost, 50); assert.equal(transaction, true); }
+    else { assert.deepEqual(sent.items.map(i => i.offer.xmlId), ['3B5ggmZQg35w2QgJWnoZ21', '3B5ggmZQg35w2QgJWnoZ21', 'g79J3w8NjidTy4BRFdaJC0']); assert.equal(JSON.parse(saved.items_json)[0].xmlId, '3B5ggmZQg35w2QgJWnoZ21'); assert.equal(sent.items.length, 3); assert.equal(sent.items[0].initialPrice, 299); assert.equal('cost' in sent.delivery, false); assert.equal(sent.items.at(-1).initialPrice, 50); assert.equal(transaction, true); }
   }
 });
 
@@ -102,8 +102,8 @@ test('retry rebuilds full UZS stored items, keeps shipping and divides only at C
   });
   const response = await retry.POST({}, { params: Promise.resolve({ id: '1' }) });
   assert.equal(response.status, 200);
-  assert.equal(sent.delivery.cost, 50);
-  assert.deepEqual(sent.items.map(item => item.initialPrice), [299, 529]);
+  assert.equal('cost' in sent.delivery, false); assert.equal(sent.items.at(-1).initialPrice, 50);
+  assert.deepEqual(sent.items.map(item => item.initialPrice), [299, 529, 50]);
 });
 
 test('auto IDs are distinct/stable and backfill preserves existing XML IDs', async () => {
@@ -143,13 +143,14 @@ test('CRM sends raw XML IDs, offer names and distinct package labels', () => {
   assert.deepEqual(output.items.map(i => i.offer), [
     { xmlId: 'XML0001_OFFER', name: 'Offer S' },
     { xmlId: 'XML0002_OFFER', name: 'Offer L' },
+    { xmlId: 'g79J3w8NjidTy4BRFdaJC0', name: 'Доставка' },
   ]);
   assert.deepEqual(output.customFields, { blok_doprodazh: 'Gói 1+1 | Gói 2+2' });
   assert.equal('customerComment' in output, false);
   assert.deepEqual(crm.buildOrderPayload(input), output);
   assert.equal(input.items[0].xmlId, 'XML0001_OFFER');
-  assert.equal(output.delivery.cost, 65);
-  assert.deepEqual(output.items.map(i => i.initialPrice), [390, 610]);
+  assert.equal('cost' in output.delivery, false);
+  assert.deepEqual(output.items.map(i => i.initialPrice), [390, 610, 65]);
 });
 
 test('manual order uses configured offer/promotion/size and splits shipping, ignoring client prices', async () => {
@@ -183,7 +184,7 @@ test('manual order uses configured offer/promotion/size and splits shipping, ign
   assert.equal(sent.items[0].offer.xmlId, '3B5ggmZQg35w2QgJWnoZ21');
   assert.equal(sent.items[0].initialPrice, 610);
   assert.equal(sent.items[0].quantity, 1);
-  assert.equal(sent.delivery.cost, 65);
+  assert.equal('cost' in sent.delivery, false); assert.equal(sent.items.at(-1).initialPrice, 65);
   assert.equal(saved.total_price, 675000);
   assert.equal(saved.landing_slug, 'test');
   assert.equal(JSON.parse(saved.items_json)[0].deliveryFee, 65000);
@@ -228,11 +229,31 @@ test('tone orders store the raw XML ID and configured offer name', () => {
   assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, 'Unknown'), /tùy chọn/);
   const multi = helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Natural White', 'Ivory White']);
   const sent = crm.buildOrderPayload({ delivery: { address: { text: 'Test' } }, items: multi.items });
-  assert.equal(sent.items.length, 1);
+  assert.equal(sent.items.length, 2);
   assert.deepEqual(sent.items[0].offer, { xmlId: 'NATURAL_ID', name: 'Kakashow Natural White' });
   assert.deepEqual(sent.customFields, { blok_doprodazh: variants[0].label + ' | Natural White + Ivory White' });
   assert.throws(() => helpers.resolveLandingItems(variants, variants[0].label, '', toneProduct, ['Natural White', 'Unknown']), /tùy chọn/);
   assert.throws(() => helpers.resolveLandingItems(variants, undefined, '', toneProduct, 'Ivory White'), /trường products/);
   assert.equal(helpers.parseLandingUrl(' https://example.test/product '), 'https://example.test/product');
   assert.throws(() => helpers.parseLandingUrl('javascript:alert(1)'), helpers.SelectionError);
+});
+
+test('shipping service is always one final item, including free shipping, without mutating input', () => {
+  for (const cost of [65000, 0, undefined]) {
+    const input = {
+      externalId: 'MAN-00170', firstName: 'Test', phone: '123',
+      delivery: { cost, address: { text: 'Test Street' } },
+      items: [{ xmlId: 'PRODUCT_ID', name_xml_id: 'Product name', variantLabel: 'Package', quantity: 1, initialPrice: 390000 }],
+    };
+    const snapshot = structuredClone(input);
+    const result = crm.buildOrderPayload(input);
+    assert.deepEqual(result.delivery, { address: { countryIso: 'UZ', city: '', text: 'Test Street' } });
+    assert.deepEqual(result.items, [
+      { offer: { xmlId: 'PRODUCT_ID', name: 'Product name' }, quantity: 1, initialPrice: 390 },
+      { offer: { xmlId: 'g79J3w8NjidTy4BRFdaJC0', name: 'Доставка' }, quantity: 1, initialPrice: (cost ?? 0) / 1000 },
+    ]);
+    assert.deepEqual(result.customFields, { blok_doprodazh: 'Package' });
+    assert.deepEqual(input, snapshot);
+    assert.deepEqual(crm.buildOrderPayload(input), result);
+  }
 });

@@ -48,7 +48,8 @@ export interface RetailCrmOrderPayload {
   lastName?: string;
   delivery: {
     address: RetailCrmDeliveryAddress;
-    cost?: number; /// Phí vận chuyển (tách riêng, không cộng vào initialPrice)
+    /** Shipping in full UZS, exported as a delivery service item. */
+    cost?: number;
   };
   items: RetailCrmOrderItem[];
   packageName?: string | null;
@@ -92,8 +93,6 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
     phone: data.phone,
     ...(data.lastName && { lastName: data.lastName }),
     delivery: {
-      // Phí vận chuyển tách riêng (không cộng vào initialPrice)
-      ...(data.delivery.cost !== undefined && { cost: data.delivery.cost / 1000 }),
       address: {
         countryIso: data.delivery.address.countryIso || 'UZ',
         city: data.delivery.address.city || '',
@@ -101,15 +100,22 @@ export function buildOrderPayload(data: RetailCrmOrderPayload): Record<string, u
       },
     },
     ...(offerNote && { customFields: { blok_doprodazh: offerNote } }),
-    items: data.items.map((item) => ({
-      offer: {
-        xmlId: item.xmlId,
-        name: (typeof item.name_xml_id === 'string' && item.name_xml_id.trim()) ||
-          (typeof item.productName === 'string' && item.productName.trim()) || item.xmlId,
+    items: [
+      ...data.items.map((item) => ({
+        offer: {
+          xmlId: item.xmlId,
+          name: (typeof item.name_xml_id === 'string' && item.name_xml_id.trim()) ||
+            (typeof item.productName === 'string' && item.productName.trim()) || item.xmlId,
+        },
+        quantity: item.quantity,
+        initialPrice: item.initialPrice / 1000,
+      })),
+      {
+        offer: { xmlId: 'g79J3w8NjidTy4BRFdaJC0', name: 'Доставка' },
+        quantity: 1,
+        initialPrice: (data.delivery.cost ?? 0) / 1000,
       },
-      quantity: item.quantity,
-      initialPrice: item.initialPrice / 1000, // Chỉ giá sản phẩm, KHÔNG có phí ship
-    })),
+    ],
   };
 }
 
